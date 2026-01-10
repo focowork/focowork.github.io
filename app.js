@@ -1,22 +1,22 @@
 /*************************************************
- * FOCOWORK – app.js (V3.0 FINAL - COMPLETO)
+ * FOCOWORK – app.js (V3.0 FINAL - COMPLETO Y REPARADO)
  * - Licencias con vinculación por dispositivo
  * - Exportación/Importación completa con imágenes
  * - Backup automático y completo
  * - Protección contra pérdida de datos
  * - Horario de enfoque configurable
  * - Monitoreo de almacenamiento
- * - Exportación a Google Drive con OAuth (GIS moderno)
+ * - Exportación a Google Drive con OAuth moderno (GIS)
  * - Interruptor para backups automáticos en Drive
  *************************************************/
 
 /* ================= CONFIG ================= */
 const WHATSAPP_PHONE = "34649383847";
 const APP_VERSION = "3.0";
-const LICENSE_SECRET = "FW2025-SECURE-KEY-X7Y9Z"; // DEBE COINCIDIR con generador
+const LICENSE_SECRET = "FW2025-SECURE-KEY-X7Y9Z";
 const GOOGLE_CLIENT_ID = '339892728740-ghh878p6g57relsi79cprbti5vac1hd4.apps.googleusercontent.com';
 
-/* ================= ACTIVITIES (INTERNAL KEYS) ================= */
+/* ================= ACTIVITIES ================= */
 const ACTIVITIES = {
   WORK: "work",
   PHONE: "phone",
@@ -55,9 +55,7 @@ function todayKey() {
 }
 
 function isWithinFocusSchedule(date = new Date()) {
-  if (!state.focusSchedule || !state.focusSchedule.enabled) {
-    return true;
-  }
+  if (!state.focusSchedule || !state.focusSchedule.enabled) return true;
 
   const [sh, sm] = state.focusSchedule.start.split(":").map(Number);
   const [eh, em] = state.focusSchedule.end.split(":").map(Number);
@@ -67,45 +65,6 @@ function isWithinFocusSchedule(date = new Date()) {
   const minutesEnd = eh * 60 + em;
 
   return minutesNow >= minutesStart && minutesNow <= minutesEnd;
-}
-
-/* ================= SISTEMA DE FIRMA DE LICENCIAS ================= */
-async function generateHash(text) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(text + LICENSE_SECRET);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-async function verifyLicenseSignature(license) {
-  if (!license || !license.signature || !license.clientId || !license.clientName) {
-    return false;
-  }
-
-  const dataToSign = `${license.clientId}-${license.clientName}-${license.expiryDate || 'unlimited'}`;
-  const expectedHash = await generateHash(dataToSign);
-  return license.signature === expectedHash;
-}
-
-/* ================= DEVICE FINGERPRINT ================= */
-function getDeviceFingerprint() {
-  const data = [
-    navigator.userAgent,
-    navigator.language,
-    screen.width,
-    screen.height,
-    screen.colorDepth,
-    new Date().getTimezoneOffset()
-  ].join('|');
-
-  let hash = 0;
-  for (let i = 0; i < data.length; i++) {
-    const char = data.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash;
-  }
-  return 'DEV-' + Math.abs(hash).toString(36).toUpperCase();
 }
 
 /* ================= MODALES ================= */
@@ -140,19 +99,13 @@ let state = JSON.parse(localStorage.getItem("focowork_state")) || {
   sessionElapsed: 0,
   clients: {},
   focus: {},
-  focusSchedule: {
-    enabled: false,
-    start: "09:00",
-    end: "17:00"
-  },
+  focusSchedule: { enabled: false, start: "09:00", end: "17:00" },
   autoDriveBackup: false
 };
 
 function save() {
   localStorage.setItem("focowork_state", JSON.stringify(state));
-  if (state.currentClientId) {
-    scheduleAutoBackup();
-  }
+  if (state.currentClientId) scheduleAutoBackup();
 }
 
 /* ================= AUTO-BACKUP ================= */
@@ -161,9 +114,7 @@ let autoBackupTimeout = null;
 function scheduleAutoBackup() {
   clearTimeout(autoBackupTimeout);
   autoBackupTimeout = setTimeout(() => {
-    if (state.currentClientId && state.clients[state.currentClientId]) {
-      performAutoBackup();
-    }
+    if (state.currentClientId && state.clients[state.currentClientId]) performAutoBackup();
   }, 300000);
 }
 
@@ -177,9 +128,8 @@ function performAutoBackup() {
     client: client
   };
 
-  const backupKey = `focowork_autobackup_${client.id}`;
   try {
-    localStorage.setItem(backupKey, JSON.stringify(backup));
+    localStorage.setItem(`focowork_autobackup_${client.id}`, JSON.stringify(backup));
   } catch (e) {
     console.warn('Auto-backup falló:', e);
   }
@@ -197,14 +147,11 @@ function performFullAutoBackup() {
 
   try {
     localStorage.setItem('focowork_full_autobackup', JSON.stringify(backup));
-    console.log('Backup completo automático realizado a medianoche:', backup.timestamp);
   } catch (e) {
     console.warn('Backup completo automático fallido:', e);
   }
 
-  if (state.autoDriveBackup) {
-    exportAllToDrive(true);
-  }
+  if (state.autoDriveBackup) exportAllToDrive(true);
 
   setTimeout(performFullAutoBackup, 24 * 60 * 60 * 1000);
 }
@@ -212,8 +159,7 @@ function performFullAutoBackup() {
 function scheduleFullAutoBackup() {
   const now = new Date();
   const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0);
-  const msToMidnight = nextMidnight.getTime() - now.getTime();
-  setTimeout(performFullAutoBackup, msToMidnight);
+  setTimeout(performFullAutoBackup, nextMidnight - now);
 }
 
 /* ================= GOOGLE DRIVE (GIS MODERNO) ================= */
@@ -225,17 +171,58 @@ function initGoogleDrive() {
     client_id: GOOGLE_CLIENT_ID,
     scope: 'https://www.googleapis.com/auth/drive.file',
     callback: (tokenResponse) => {
-      googleAccessToken = tokenResponse.access_token;
+      if (tokenResponse && tokenResponse.access_token) {
+        googleAccessToken = tokenResponse.access_token;
+      }
     }
   });
+}
+
+async function exportAllToDrive(autoMode = false) {
+  if (!googleAccessToken) {
+    if (!autoMode) googleTokenClient.requestAccessToken();
+    return;
+  }
+
+  const exportData = {
+    version: APP_VERSION,
+    exportDate: new Date().toISOString(),
+    userName: userName,
+    state: state,
+    license: state.license,
+    type: 'full_backup'
+  };
+
+  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+
+  const metadata = {
+    name: `focowork_completo_${todayKey()}.focowork`,
+    mimeType: 'application/json'
+  };
+
+  const form = new FormData();
+  form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+  form.append('file', blob);
+
+  try {
+    const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${googleAccessToken}` },
+      body: form
+    });
+
+    if (!res.ok) throw new Error('Error subiendo a Drive');
+
+    if (!autoMode) showAlert('Exportado a Drive', 'Backup subido correctamente a Google Drive', '✅');
+  } catch (err) {
+    if (!autoMode) showAlert('Error Drive', err.message, '❌');
+  }
 }
 
 /* ================= CONFIGURACIÓN DE BACKUPS ================= */
 function openBackupConfigModal() {
   const checkbox = $('autoDriveBackupCheckbox');
-  if (checkbox) {
-    checkbox.checked = state.autoDriveBackup;
-  }
+  if (checkbox) checkbox.checked = state.autoDriveBackup;
   openModal('modalBackupConfig');
 }
 
@@ -258,7 +245,7 @@ function resetDayIfNeeded() {
   }
 }
 
-/* ================= SISTEMA DE LICENCIAS CON DISPOSITIVOS ================= */
+/* ================= SISTEMA DE LICENCIAS ================= */
 async function loadLicenseFile() {
   const input = document.createElement('input');
   input.type = 'file';
@@ -294,9 +281,7 @@ async function loadLicenseFile() {
       const currentDevice = getDeviceFingerprint();
       const maxDevices = license.maxDevices || 1;
 
-      if (!license.devices) {
-        license.devices = [];
-      }
+      if (!license.devices) license.devices = [];
 
       const deviceIndex = license.devices.findIndex(d => d.id === currentDevice);
 
@@ -349,7 +334,7 @@ function requestLicense() {
   window.open(`https://wa.me/${WHATSAPP_PHONE}?text=${encodeURIComponent(msg)}`);
 }
 
-/* ================= EXPORTACIÓN/IMPORTACIÓN INDIVIDUAL ================= */
+/* ================= EXPORTACIÓN/IMPORTACIÓN ================= */
 function exportCurrentWork() {
   const client = state.clients[state.currentClientId];
   if (!client) {
@@ -495,15 +480,11 @@ function confirmImportBackup() {
 
   const backupData = window.pendingBackup;
 
-  if (backupData.state) {
-    state = backupData.state;
-  }
-
+  if (backupData.state) state = backupData.state;
   if (backupData.userName) {
     userName = backupData.userName;
     localStorage.setItem("focowork_user_name", userName);
   }
-
   if (backupData.license) {
     state.license = backupData.license;
     state.isFull = true;
@@ -520,9 +501,7 @@ function confirmImportBackup() {
 
   window.pendingBackup = null;
 
-  setTimeout(() => {
-    location.reload();
-  }, 2000);
+  setTimeout(() => location.reload(), 2000);
 }
 
 /* ================= UTILIDADES DE ALMACENAMIENTO ================= */
@@ -619,7 +598,7 @@ function setActivity(activity) {
   updateUI();
 }
 
-/* ================= WORKPAD (NOTAS) ================= */
+/* ================= WORKPAD ================= */
 let workpadTimeout = null;
 let isWorkpadInitialized = false;
 
@@ -654,8 +633,7 @@ function handleWorkpadInput(e) {
 
   client.notes = e.target.value;
   clearTimeout(workpadTimeout);
-
-  workpadTimeout = setTimeout(() => save(), 1000);
+  workpadTimeout = setTimeout(save, 1000);
 }
 
 /* ================= UI ================= */
@@ -1160,7 +1138,6 @@ function saveScheduleConfig() {
 document.addEventListener('DOMContentLoaded', () => {
   initGoogleDrive();
 
-  // BOTONES PRINCIPALES
   $('newClient').onclick = newClient;
   $('changeClient').onclick = changeClient;
   $('historyBtn').onclick = showHistory;
@@ -1171,13 +1148,11 @@ document.addEventListener('DOMContentLoaded', () => {
   $('cameraBtn').onclick = addPhotoToClient;
   $('deleteClientBtn').onclick = deleteCurrentClient;
 
-  // BOTONES DE BACKUP Y LICENCIAS
   if ($('exportWorkBtn')) $('exportWorkBtn').onclick = exportCurrentWork;
   if ($('importWorkBtn')) $('importWorkBtn').onclick = importWork;
   if ($('exportAllBtn')) $('exportAllBtn').onclick = exportAllData;
   if ($('loadLicenseBtn')) $('loadLicenseBtn').onclick = loadLicenseFile;
   if ($('requestLicenseBtn')) $('requestLicenseBtn').onclick = requestLicense;
-  if ($('storageBtn')) $('storageBtn').onclick = showStorageInfo;
   if ($('exportToDriveBtn')) $('exportToDriveBtn').onclick = () => exportAllToDrive(false);
   if ($('backupConfigBtn')) $('backupConfigBtn').onclick = openBackupConfigModal;
 
@@ -1200,19 +1175,16 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   $('focusBtn').addEventListener('touchend', () => clearTimeout(focusLongPressTimer));
 
-  // BOTONES DE ACTIVIDAD
   document.querySelectorAll('.activity').forEach(btn => {
     btn.onclick = () => setActivity(btn.dataset.activity);
   });
 
-  // CERRAR MODALES AL CLIC FUERA
   document.querySelectorAll('.modal-overlay').forEach(overlay => {
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) closeModal(overlay.id);
     });
   });
 
-  // ENTER EN INPUTS
   if ($('inputNewClient')) $('inputNewClient').addEventListener('keypress', e => {
     if (e.key === 'Enter') confirmNewClient();
   });
@@ -1221,7 +1193,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Enter') confirmDeleteClient();
   });
 
-  // BUSCADOR DE HISTÓRICO
   if ($('searchHistory')) $('searchHistory').addEventListener('input', e => {
     const query = e.target.value.toLowerCase();
     const closed = Object.values(state.clients).filter(c => !c.active);
@@ -1232,7 +1203,6 @@ document.addEventListener('DOMContentLoaded', () => {
     renderHistoryList(filtered);
   });
 
-  // VERIFICAR LICENCIA AL INICIO
   if (state.license && state.license.expiryDate) {
     const expiry = new Date(state.license.expiryDate);
     if (expiry < new Date()) {
@@ -1243,73 +1213,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // PROGRAMAR BACKUPS A MEDIANOCHE
   scheduleFullAutoBackup();
-
-  // INICIO
   updateUI();
 });
-
-/* ================= GOOGLE DRIVE (GIS MODERNO) ================= */
-let googleTokenClient = null;
-let googleAccessToken = null;
-
-function initGoogleDrive() {
-  googleTokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: GOOGLE_CLIENT_ID,
-    scope: 'https://www.googleapis.com/auth/drive.file',
-    callback: (tokenResponse) => {
-      googleAccessToken = tokenResponse.access_token;
-    }
-  });
-}
-
-async function exportAllToDrive(autoMode = false) {
-  if (!googleAccessToken) {
-    if (autoMode) return;
-    googleTokenClient.requestAccessToken();
-    return;
-  }
-
-  const exportData = {
-    version: APP_VERSION,
-    exportDate: new Date().toISOString(),
-    userName: userName,
-    state: state,
-    license: state.license,
-    type: 'full_backup'
-  };
-
-  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-
-  const metadata = {
-    name: `focowork_completo_${todayKey()}.focowork`,
-    mimeType: 'application/json'
-  };
-
-  const form = new FormData();
-  form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-  form.append('file', blob);
-
-  try {
-    const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-      method: 'POST',
-      headers: {
-        Authorization: 'Bearer ' + googleAccessToken
-      },
-      body: form
-    });
-
-    if (!res.ok) throw new Error('Error subiendo a Drive');
-
-    const result = await res.json();
-
-    if (!autoMode) {
-      showAlert('Exportado a Drive', 'Backup subido correctamente a Google Drive', '✅');
-    }
-  } catch (err) {
-    if (!autoMode) {
-      showAlert('Error Drive', err.message, '❌');
-    }
-  }
-}
