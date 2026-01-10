@@ -15,7 +15,7 @@
 const WHATSAPP_PHONE = "34649383847";
 const APP_VERSION = "3.0";
 const LICENSE_SECRET = "FW2025-SECURE-KEY-X7Y9Z"; // DEBE COINCIDIR con generador
-const GOOGLE_CLIENT_ID = 'YOUR_CLIENT_ID.apps.googleusercontent.com'; // Reemplaza con tu Client ID real de Google Cloud
+const GOOGLE_CLIENT_ID = '339892728740-ghh878p6g57relsi79cprbti5vac1hd4.apps.googleusercontent.com'; // Reemplaza con tu Client ID real de Google Cloud
 const GOOGLE_API_KEY = 'YOUR_API_KEY'; // Opcional, si lo necesitas para discovery
 
 /* ================= ACTIVITIES (INTERNAL KEYS) ================= */
