@@ -165,74 +165,73 @@ function scheduleFullAutoBackup() {
 /* ================= GOOGLE DRIVE (GIS MODERNO) ================= */
 let googleTokenClient = null;
 let googleAccessToken = null;
+let googleInitialized = false;
 
 function initGoogleDrive() {
   if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
-    console.log('Google Identity Services aún no cargó, reintentando...');
-    let retries = 0;
-    const interval = setInterval(() => {
-      retries++;
-      if (typeof google !== 'undefined' && google.accounts && google.accounts.oauth2) {
-        console.log('Google cargado correctamente');
-        googleTokenClient = google.accounts.oauth2.initTokenClient({
-          client_id: GOOGLE_CLIENT_ID,
-          scope: 'https://www.googleapis.com/auth/drive.file',
-          callback: (tokenResponse) => {
-            if (tokenResponse && tokenResponse.access_token) {
-              googleAccessToken = tokenResponse.access_token;
-              console.log('Token de acceso obtenido');
-              // Si hay una subida pendiente, ejecutarla
-              if (window.pendingDriveUpload) {
-                uploadToDriveNow(window.pendingDriveUpload.autoMode);
-                window.pendingDriveUpload = null;
-              }
-            } else if (tokenResponse.error) {
-              console.error('Error obteniendo token:', tokenResponse);
-              showAlert('Error de autenticación', 'No se pudo conectar con Google Drive. Intenta de nuevo.', '❌');
-            }
-          }
-        });
-        clearInterval(interval);
-      }
-      if (retries > 10) {
-        console.error('No se pudo cargar Google Identity Services después de varios intentos');
-        clearInterval(interval);
-        showAlert('Error de carga', 'No se pudo cargar Google Drive. Verifica tu conexión a internet.', '❌');
-      }
-    }, 500);
-  } else {
-    console.log('Google ya estaba cargado');
+    console.log('Google Identity Services aún no disponible');
+    googleInitialized = false;
+    return;
+  }
+
+  try {
+    console.log('Inicializando Google Drive...');
     googleTokenClient = google.accounts.oauth2.initTokenClient({
       client_id: GOOGLE_CLIENT_ID,
       scope: 'https://www.googleapis.com/auth/drive.file',
       callback: (tokenResponse) => {
         if (tokenResponse && tokenResponse.access_token) {
           googleAccessToken = tokenResponse.access_token;
-          console.log('Token de acceso obtenido');
+          console.log('✅ Token de acceso obtenido');
+          googleInitialized = true;
+          
           // Si hay una subida pendiente, ejecutarla
           if (window.pendingDriveUpload) {
             uploadToDriveNow(window.pendingDriveUpload.autoMode);
             window.pendingDriveUpload = null;
           }
         } else if (tokenResponse.error) {
-          console.error('Error obteniendo token:', tokenResponse);
-          showAlert('Error de autenticación', 'No se pudo conectar con Google Drive. Intenta de nuevo.', '❌');
+          console.error('❌ Error obteniendo token:', tokenResponse);
+          if (!window.pendingDriveUpload?.autoMode) {
+            showAlert('Error de autenticación', 'No se pudo conectar con Google Drive. Intenta de nuevo.', '❌');
+          }
         }
       }
     });
+    
+    googleInitialized = true;
+    console.log('✅ Google Drive inicializado correctamente');
+  } catch (error) {
+    console.error('❌ Error en initGoogleDrive:', error);
+    googleInitialized = false;
   }
 }
 
 async function exportAllToDrive(autoMode = false) {
-  if (!googleTokenClient) {
-    showAlert('Error', 'Google Drive no está disponible. Recarga la página e intenta de nuevo.', '❌');
+  // Verificar que Google esté disponible
+  if (!googleInitialized) {
+    console.log('Reintentando inicialización de Google Drive...');
+    try {
+      await loadGoogleScript();
+      initGoogleDrive();
+      // Esperar un momento para que se inicialice
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    } catch (e) {
+      console.error('Error cargando Google:', e);
+    }
+  }
+
+  if (!googleTokenClient || !googleInitialized) {
+    if (!autoMode) {
+      showAlert('Error', 'Google Drive no está disponible.\n\nVerifica tu conexión a internet y recarga la app.', '❌');
+    }
     return;
   }
 
   if (!googleAccessToken) {
     // Guardar que hay una subida pendiente
     window.pendingDriveUpload = { autoMode };
-    // Solicitar permiso al usuario
+    
     if (!autoMode) {
       showAlert('Autorizando...', 'Se abrirá una ventana para autorizar el acceso a Google Drive.', 'ℹ️');
       setTimeout(() => {
@@ -272,6 +271,7 @@ async function uploadToDriveNow(autoMode = false) {
   form.append('file', blob);
 
   try {
+    console.log('📤 Subiendo archivo a Drive...');
     const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
       method: 'POST',
       headers: { Authorization: `Bearer ${googleAccessToken}` },
@@ -281,37 +281,47 @@ async function uploadToDriveNow(autoMode = false) {
     const responseData = await res.json();
 
     if (!res.ok) {
-      console.error('Error de Drive:', responseData);
+      console.error('❌ Error de Drive:', responseData);
       throw new Error(responseData.error?.message || 'Error subiendo a Drive');
     }
 
-    console.log('Archivo subido exitosamente:', responseData);
+    console.log('✅ Archivo subido exitosamente:', responseData);
     if (!autoMode) {
       showAlert('✅ Exportado a Drive', `Backup subido correctamente a Google Drive\n\nArchivo: ${metadata.name}`, '✅');
     }
   } catch (err) {
-    console.error('Error en subida a Drive:', err);
+    console.error('❌ Error en subida a Drive:', err);
     if (!autoMode) {
       showAlert('Error Drive', `No se pudo subir a Drive:\n${err.message}\n\nIntenta de nuevo o usa la exportación local.`, '❌');
     }
   }
 }
 
-/* ================= CONFIGURACIÓN DE BACKUPS ================= */
-function openBackupConfigModal() {
-  const checkbox = $('autoDriveBackupCheckbox');
-  if (checkbox) checkbox.checked = state.autoDriveBackup;
-  openModal('modalBackupConfig');
-}
+// Cargar Google Identity Services dinámicamente
+function loadGoogleScript() {
+  return new Promise((resolve, reject) => {
+    if (typeof google !== 'undefined' && google.accounts) {
+      resolve();
+      return;
+    }
 
-function saveBackupConfig() {
-  const checkbox = $('autoDriveBackupCheckbox');
-  if (checkbox) {
-    state.autoDriveBackup = checkbox.checked;
-    save();
-    closeModal('modalBackupConfig');
-    showAlert('Configuración guardada', state.autoDriveBackup ? 'Backups automáticos en Drive activados' : 'Backups automáticos en Drive desactivados', '✅');
-  }
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    
+    script.onload = () => {
+      console.log('Google script cargado');
+      setTimeout(() => resolve(), 500);
+    };
+    
+    script.onerror = () => {
+      console.error('Error cargando Google script');
+      reject(new Error('No se pudo cargar Google Identity Services'));
+    };
+    
+    document.head.appendChild(script);
+  });
 }
 
 /* ================= CONFIGURACIÓN DE BACKUPS ================= */
@@ -1230,8 +1240,14 @@ function saveScheduleConfig() {
 }
 
 /* ================= EVENT LISTENERS ================= */
-document.addEventListener('DOMContentLoaded', () => {
-  initGoogleDrive();
+document.addEventListener('DOMContentLoaded', async () => {
+  // Cargar Google Script primero
+  try {
+    await loadGoogleScript();
+    initGoogleDrive();
+  } catch (e) {
+    console.error('Error inicializando Google Drive:', e);
+  }
 
   $('newClient').onclick = newClient;
   $('changeClient').onclick = changeClient;
