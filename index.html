@@ -56,6 +56,33 @@
           style="display: none;"
         ></textarea>
       </div>
+
+      <!-- FEINES PER URGÈNCIA -->
+      <div class="workpad-container">
+        <div class="workpad-header">
+          <span class="workpad-icon">🚨</span>
+          <span class="workpad-title">Feines per urgència</span>
+        </div>
+
+        <textarea
+          id="taskUrgent"
+          class="workpad-area urgent"
+          placeholder="🔴 Urgent (avui, foc, bloquejant...)"
+        ></textarea>
+
+        <textarea
+          id="taskImportant"
+          class="workpad-area important"
+          placeholder="🟠 Important (següent pas)"
+        ></textarea>
+
+        <textarea
+          id="taskLater"
+          class="workpad-area later"
+          placeholder="🟢 Quan es pugui (no oblidar)"
+        ></textarea>
+      </div>
+
       <button id="cameraBtn" class="primary">
         📷 Añadir foto al cliente
       </button>
@@ -79,7 +106,7 @@
       <div class="grid">
         <button id="exportWorkBtn">💾 Guardar trabajo</button>
         <button id="importWorkBtn">📂 Cargar trabajo</button>
-        <button id="exportAllBtn" class="full-width">🔄 Backup completo</button>
+        <button id="exportAllBtn" class="full-width">📦 Backup completo</button>
       </div>
       <p style="font-size: 12px; opacity: 0.6; text-align: center; margin-top: 8px;">
         💡 El botón "Cargar trabajo" acepta tanto trabajos individuales como backups completos
@@ -108,7 +135,7 @@
       </div>
 
       <button id="loadLicenseBtn" class="primary">
-        📁 Cargar archivo de licencia
+        📄 Cargar archivo de licencia
       </button>
 
       <button id="requestLicenseBtn">
@@ -236,7 +263,7 @@
   <div id="modalImportBackup" class="modal-overlay hidden">
     <div class="modal">
       <div class="modal-header">
-        <span class="modal-icon">🔄</span>
+        <span class="modal-icon">📦</span>
         <h2 class="modal-title">Restaurar backup completo</h2>
       </div>
       <div class="modal-body">
