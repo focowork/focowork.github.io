@@ -167,15 +167,42 @@ let googleTokenClient = null;
 let googleAccessToken = null;
 
 function initGoogleDrive() {
-  googleTokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: GOOGLE_CLIENT_ID,
-    scope: 'https://www.googleapis.com/auth/drive.file',
-    callback: (tokenResponse) => {
-      if (tokenResponse && tokenResponse.access_token) {
-        googleAccessToken = tokenResponse.access_token;
+  if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
+    console.log('Google Identity Services aún no cargó, reintentando...');
+    let retries = 0;
+    const interval = setInterval(() => {
+      retries++;
+      if (typeof google !== 'undefined' && google.accounts && google.accounts.oauth2) {
+        console.log('Google cargado correctamente');
+        googleTokenClient = google.accounts.oauth2.initTokenClient({
+          client_id: GOOGLE_CLIENT_ID,
+          scope: 'https://www.googleapis.com/auth/drive.file',
+          callback: (tokenResponse) => {
+            if (tokenResponse && tokenResponse.access_token) {
+              googleAccessToken = tokenResponse.access_token;
+              console.log('Token de acceso obtenido');
+            }
+          }
+        });
+        clearInterval(interval);
       }
-    }
-  });
+      if (retries > 5) {
+        console.error('No se pudo cargar Google Identity Services después de varios intentos');
+        clearInterval(interval);
+      }
+    }, 500);
+  } else {
+    console.log('Google ya estaba cargado');
+    googleTokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID,
+      scope: 'https://www.googleapis.com/auth/drive.file',
+      callback: (tokenResponse) => {
+        if (tokenResponse && tokenResponse.access_token) {
+          googleAccessToken = tokenResponse.access_token;
+        }
+      }
+    });
+  }
 }
 
 async function exportAllToDrive(autoMode = false) {
@@ -216,6 +243,23 @@ async function exportAllToDrive(autoMode = false) {
     if (!autoMode) showAlert('Exportado a Drive', 'Backup subido correctamente a Google Drive', '✅');
   } catch (err) {
     if (!autoMode) showAlert('Error Drive', err.message, '❌');
+  }
+}
+
+/* ================= CONFIGURACIÓN DE BACKUPS ================= */
+function openBackupConfigModal() {
+  const checkbox = $('autoDriveBackupCheckbox');
+  if (checkbox) checkbox.checked = state.autoDriveBackup;
+  openModal('modalBackupConfig');
+}
+
+function saveBackupConfig() {
+  const checkbox = $('autoDriveBackupCheckbox');
+  if (checkbox) {
+    state.autoDriveBackup = checkbox.checked;
+    save();
+    closeModal('modalBackupConfig');
+    showAlert('Configuración guardada', state.autoDriveBackup ? 'Backups automáticos en Drive activados' : 'Backups automáticos en Drive desactivados', '✅');
   }
 }
 
