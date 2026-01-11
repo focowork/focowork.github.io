@@ -181,14 +181,23 @@ function initGoogleDrive() {
             if (tokenResponse && tokenResponse.access_token) {
               googleAccessToken = tokenResponse.access_token;
               console.log('Token de acceso obtenido');
+              // Si hay una subida pendiente, ejecutarla
+              if (window.pendingDriveUpload) {
+                uploadToDriveNow(window.pendingDriveUpload.autoMode);
+                window.pendingDriveUpload = null;
+              }
+            } else if (tokenResponse.error) {
+              console.error('Error obteniendo token:', tokenResponse);
+              showAlert('Error de autenticación', 'No se pudo conectar con Google Drive. Intenta de nuevo.', '❌');
             }
           }
         });
         clearInterval(interval);
       }
-      if (retries > 5) {
+      if (retries > 10) {
         console.error('No se pudo cargar Google Identity Services después de varios intentos');
         clearInterval(interval);
+        showAlert('Error de carga', 'No se pudo cargar Google Drive. Verifica tu conexión a internet.', '❌');
       }
     }, 500);
   } else {
@@ -199,6 +208,15 @@ function initGoogleDrive() {
       callback: (tokenResponse) => {
         if (tokenResponse && tokenResponse.access_token) {
           googleAccessToken = tokenResponse.access_token;
+          console.log('Token de acceso obtenido');
+          // Si hay una subida pendiente, ejecutarla
+          if (window.pendingDriveUpload) {
+            uploadToDriveNow(window.pendingDriveUpload.autoMode);
+            window.pendingDriveUpload = null;
+          }
+        } else if (tokenResponse.error) {
+          console.error('Error obteniendo token:', tokenResponse);
+          showAlert('Error de autenticación', 'No se pudo conectar con Google Drive. Intenta de nuevo.', '❌');
         }
       }
     });
@@ -206,11 +224,33 @@ function initGoogleDrive() {
 }
 
 async function exportAllToDrive(autoMode = false) {
-  if (!googleAccessToken) {
-    if (!autoMode) googleTokenClient.requestAccessToken();
+  if (!googleTokenClient) {
+    showAlert('Error', 'Google Drive no está disponible. Recarga la página e intenta de nuevo.', '❌');
     return;
   }
 
+  if (!googleAccessToken) {
+    // Guardar que hay una subida pendiente
+    window.pendingDriveUpload = { autoMode };
+    // Solicitar permiso al usuario
+    if (!autoMode) {
+      showAlert('Autorizando...', 'Se abrirá una ventana para autorizar el acceso a Google Drive.', 'ℹ️');
+      setTimeout(() => {
+        try {
+          googleTokenClient.requestAccessToken({ prompt: 'consent' });
+        } catch (e) {
+          console.error('Error al solicitar token:', e);
+          showAlert('Error', 'No se pudo solicitar autorización. Intenta de nuevo.', '❌');
+        }
+      }, 500);
+    }
+    return;
+  }
+
+  uploadToDriveNow(autoMode);
+}
+
+async function uploadToDriveNow(autoMode = false) {
   const exportData = {
     version: APP_VERSION,
     exportDate: new Date().toISOString(),
@@ -238,11 +278,22 @@ async function exportAllToDrive(autoMode = false) {
       body: form
     });
 
-    if (!res.ok) throw new Error('Error subiendo a Drive');
+    const responseData = await res.json();
 
-    if (!autoMode) showAlert('Exportado a Drive', 'Backup subido correctamente a Google Drive', '✅');
+    if (!res.ok) {
+      console.error('Error de Drive:', responseData);
+      throw new Error(responseData.error?.message || 'Error subiendo a Drive');
+    }
+
+    console.log('Archivo subido exitosamente:', responseData);
+    if (!autoMode) {
+      showAlert('✅ Exportado a Drive', `Backup subido correctamente a Google Drive\n\nArchivo: ${metadata.name}`, '✅');
+    }
   } catch (err) {
-    if (!autoMode) showAlert('Error Drive', err.message, '❌');
+    console.error('Error en subida a Drive:', err);
+    if (!autoMode) {
+      showAlert('Error Drive', `No se pudo subir a Drive:\n${err.message}\n\nIntenta de nuevo o usa la exportación local.`, '❌');
+    }
   }
 }
 
