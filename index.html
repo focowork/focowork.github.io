@@ -3,25 +3,25 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
   <title>FocoWork</title>
-  
+
   <!-- PWA -->
   <link rel="manifest" href="/focoworklimited/manifest.json">
   <meta name="theme-color" content="#0f172a">
-  
+
   <!-- iOS -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="apple-touch-icon" href="/focoworklimited/icons/icon-180.png">
-  
-  <!-- Google Identity Services (GIS) - nuevo sistema para Drive -->
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
-  
+
   <!-- Styles -->
   <link rel="stylesheet" href="styles.css" />
 </head>
+
 <body>
   <div class="app">
+
     <!-- HEADER -->
     <header class="header">
       <div id="clientName" class="client-name">Sin cliente activo</div>
@@ -49,19 +49,18 @@
           <span class="workpad-icon">📝</span>
           <span class="workpad-title">Notas del cliente</span>
         </div>
-        <textarea
-          id="clientWorkpad"
-          class="workpad-area"
+        <textarea 
+          id="clientWorkpad" 
+          class="workpad-area" 
           placeholder="Apuntes, tareas pendientes, detalles del proyecto..."
           style="display: none;"
         ></textarea>
       </div>
-
-      <button id="cameraBtn" class="primary" style="display: none;">
+      <button id="cameraBtn" class="primary">
         📷 Añadir foto al cliente
       </button>
 
-      <!-- Galería de fotos -->
+      <!-- Galería (se llenará por JS) -->
       <div id="photoGallery" class="photo-gallery"></div>
     </section>
 
@@ -77,15 +76,13 @@
 
     <!-- BACKUP Y GESTIÓN -->
     <section class="panel">
-      <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px;">
+      <div class="grid">
         <button id="exportWorkBtn">💾 Guardar trabajo</button>
         <button id="importWorkBtn">📂 Cargar trabajo</button>
-        <button id="exportAllBtn">🔄 Backup completo</button>
-        <button id="exportToDriveBtn">☁️ Exportar a Drive</button>
-        <button id="backupConfigBtn">⚙️ Config backups Drive</button>
+        <button id="exportAllBtn" class="full-width">🔄 Backup completo</button>
       </div>
       <p style="font-size: 12px; opacity: 0.6; text-align: center; margin-top: 8px;">
-        💡 "Cargar trabajo" acepta trabajos individuales y backups completos
+        💡 El botón "Cargar trabajo" acepta tanto trabajos individuales como backups completos
       </p>
     </section>
 
@@ -100,7 +97,7 @@
     <footer class="footer">
       <button id="focusBtn">🎯 Enfoque</button>
       <button id="scheduleBtn">⏰ Horario</button>
-      <button id="todayBtn">📄 CSV hoy</button>
+      <button id="todayBtn">📄 CSV</button>
     </footer>
 
     <!-- VERSIÓN / ACTIVACIÓN -->
@@ -109,18 +106,22 @@
         🔒 <strong>Versión de prueba</strong><br />
         Máximo 2 clientes activos simultáneamente
       </div>
+
       <button id="loadLicenseBtn" class="primary">
         📁 Cargar archivo de licencia
       </button>
+
       <button id="requestLicenseBtn">
         💬 Solicitar licencia por WhatsApp
       </button>
+      
       <div id="licenseInfo" style="display: none; margin-top: 12px; padding: 12px; background: rgba(16, 185, 129, 0.1); border-radius: 8px; font-size: 13px; text-align: center; color: #10b981;"></div>
     </div>
+
   </div>
 
   <!-- ===============================================
-       MODALES (todos completos)
+       MODALES
        =============================================== -->
 
   <!-- MODAL: Nuevo Cliente -->
@@ -208,7 +209,7 @@
     </div>
   </div>
 
-  <!-- MODAL: Importar Trabajo individual -->
+  <!-- MODAL: Importar Trabajo -->
   <div id="modalImportWork" class="modal-overlay hidden">
     <div class="modal">
       <div class="modal-header">
@@ -217,11 +218,11 @@
       </div>
       <div class="modal-body">
         <p class="modal-text">¿Deseas importar este trabajo?</p>
-        <div style="background: rgba(51,65,85,0.4); padding:16px; border-radius:12px; margin:12px 0;">
-          <p style="margin:8px 0;"><strong>Cliente:</strong> <span id="importClientName"></span></p>
-          <p style="margin:8px 0;"><strong>Tiempo total:</strong> <span id="importClientTime"></span></p>
-          <p style="margin:8px 0;"><strong>Fotos:</strong> <span id="importClientPhotos"></span></p>
-          <p style="margin:8px 0;"><strong>Notas:</strong> <span id="importClientNotes"></span></p>
+        <div style="background: rgba(51, 65, 85, 0.4); padding: 16px; border-radius: 12px; margin: 12px 0;">
+          <p style="margin: 8px 0;"><strong>Cliente:</strong> <span id="importClientName"></span></p>
+          <p style="margin: 8px 0;"><strong>Tiempo total:</strong> <span id="importClientTime"></span></p>
+          <p style="margin: 8px 0;"><strong>Fotos:</strong> <span id="importClientPhotos"></span></p>
+          <p style="margin: 8px 0;"><strong>Notas:</strong> <span id="importClientNotes"></span></p>
         </div>
       </div>
       <div class="modal-footer">
@@ -239,14 +240,14 @@
         <h2 class="modal-title">Restaurar backup completo</h2>
       </div>
       <div class="modal-body">
-        <p class="modal-text" style="color:#fbbf24;">⚠️ ATENCIÓN: Esto restaurará TODOS tus datos.</p>
-        <div style="background:rgba(51,65,85,0.4); padding:16px; border-radius:12px; margin:12px 0;">
-          <p style="margin:8px 0;"><strong>Total clientes:</strong> <span id="importBackupClients"></span></p>
-          <p style="margin:8px 0;"><strong>Clientes activos:</strong> <span id="importBackupActive"></span></p>
-          <p style="margin:8px 0;"><strong>Fecha backup:</strong> <span id="importBackupDate"></span></p>
-          <p style="margin:8px 0;"><strong>Licencia incluida:</strong> <span id="importBackupLicense"></span></p>
+        <p class="modal-text" style="color: #fbbf24;">⚠️ ATENCIÓN: Esto restaurará TODOS tus datos desde el backup.</p>
+        <div style="background: rgba(51, 65, 85, 0.4); padding: 16px; border-radius: 12px; margin: 12px 0;">
+          <p style="margin: 8px 0;"><strong>Total clientes:</strong> <span id="importBackupClients"></span></p>
+          <p style="margin: 8px 0;"><strong>Clientes activos:</strong> <span id="importBackupActive"></span></p>
+          <p style="margin: 8px 0;"><strong>Fecha backup:</strong> <span id="importBackupDate"></span></p>
+          <p style="margin: 8px 0;"><strong>Licencia incluida:</strong> <span id="importBackupLicense"></span></p>
         </div>
-        <p class="modal-text" style="font-size:13px; opacity:0.8;">La página se recargará automáticamente después.</p>
+        <p class="modal-text" style="font-size: 13px; opacity: 0.8;">La página se recargará automáticamente después de restaurar.</p>
       </div>
       <div class="modal-footer">
         <button class="btn-secondary" onclick="closeModal('modalImportBackup')">Cancelar</button>
@@ -308,38 +309,41 @@
       </div>
       <div class="modal-body">
         <p class="modal-text" style="opacity: 0.8; margin-bottom: 20px;">
-          El enfoque solo contabiliza tiempo dentro del horario configurado.
+          El enfoque solo contabiliza tiempo dentro del horario configurado. Fuera de ese horario puedes seguir trabajando, pero no afecta a las métricas de enfoque.
         </p>
-        <label style="display:flex; align-items:center; gap:10px; margin-bottom:20px; cursor:pointer;">
-          <input type="checkbox" id="scheduleEnabled" style="width:20px; height:20px; cursor:pointer;">
+
+        <label class="modal-label" style="display: flex; align-items: center; gap: 10px; margin-bottom: 20px; cursor: pointer;">
+          <input type="checkbox" id="scheduleEnabled" style="width: 20px; height: 20px; cursor: pointer;">
           <span>Activar horario de enfoque</span>
         </label>
-        <div id="scheduleConfig" style="display:none;">
-          <div style="display:flex; gap:15px; align-items:center; margin-bottom:15px;">
-            <div style="flex:1;">
-              <label class="modal-label">Inicio</label>
+
+        <div id="scheduleConfig" style="display: none;">
+          <div style="display: flex; gap: 15px; align-items: center; margin-bottom: 15px;">
+            <div style="flex: 1;">
+              <label class="modal-label">Hora inicio</label>
               <input type="time" id="scheduleStart" class="modal-input" value="09:00">
             </div>
-            <div style="flex:1;">
-              <label class="modal-label">Fin</label>
+            <div style="flex: 1;">
+              <label class="modal-label">Hora fin</label>
               <input type="time" id="scheduleEnd" class="modal-input" value="17:00">
             </div>
           </div>
-          <!-- Presets -->
+
           <div class="schedule-presets">
-            <p class="modal-label" style="margin-bottom:10px;">Presets rápidos:</p>
-            <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:8px;">
-              <button class="btn-secondary" onclick="applyPreset('07:00','14:00')">🌅 Mañana</button>
-              <button class="btn-secondary" onclick="applyPreset('15:00','22:00')">🌆 Tarde</button>
-              <button class="btn-secondary" onclick="applyPreset('09:00','17:00')">🏢 Oficina</button>
-              <button class="btn-secondary" onclick="applyPreset('09:00','18:00')">💼 Completo</button>
+            <p class="modal-label" style="margin-bottom: 10px;">Presets rápidos:</p>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
+              <button class="btn-secondary" onclick="applyPreset('07:00', '14:00')">🌅 Mañana<br><small>07:00 - 14:00</small></button>
+              <button class="btn-secondary" onclick="applyPreset('15:00', '22:00')">🌆 Tarde<br><small>15:00 - 22:00</small></button>
+              <button class="btn-secondary" onclick="applyPreset('09:00', '17:00')">🏢 Oficina<br><small>09:00 - 17:00</small></button>
+              <button class="btn-secondary" onclick="applyPreset('09:00', '18:00')">💼 Completo<br><small>09:00 - 18:00</small></button>
             </div>
           </div>
-          <div style="margin-top:20px; padding:12px; background:rgba(0,255,136,0.1); border-radius:8px; border-left:3px solid #00ff88;">
-            <p style="margin:0; font-size:13px; color:#00ff88;">
+
+          <div style="margin-top: 20px; padding: 12px; background: rgba(0, 255, 136, 0.1); border-radius: 8px; border-left: 3px solid #00ff88;">
+            <p style="margin: 0; font-size: 13px; color: #00ff88;">
               <strong id="schedulePreview">09:00 - 17:00</strong>
             </p>
-            <p style="margin:5px 0 0; font-size:12px; opacity:0.7;">
+            <p style="margin: 5px 0 0; font-size: 12px; opacity: 0.7;">
               Duración: <span id="scheduleDuration">8h 0m</span>
             </p>
           </div>
@@ -369,33 +373,7 @@
     </div>
   </div>
 
-  <!-- NUEVO MODAL: Configuración Backups Drive -->
-  <div id="modalBackupConfig" class="modal-overlay hidden">
-    <div class="modal">
-      <div class="modal-header">
-        <span class="modal-icon">☁️</span>
-        <h2 class="modal-title">Backups automáticos Drive</h2>
-      </div>
-      <div class="modal-body">
-        <p style="margin-bottom: 20px; opacity: 0.8;">
-          Activa para que la app intente subir un backup completo a tu Google Drive cada medianoche (si ya diste permiso).
-        </p>
-        <label style="display:flex; align-items:center; gap:12px; font-size:16px; cursor:pointer;">
-          <input type="checkbox" id="autoDriveBackupCheckbox" style="width:24px; height:24px; cursor:pointer;">
-          Activar backups automáticos en Google Drive
-        </label>
-        <p style="margin-top:16px; font-size:13px; opacity:0.7;">
-          Nota: Debes haber usado al menos una vez el botón "Exportar a Drive" para autorizar la cuenta.
-        </p>
-      </div>
-      <div class="modal-footer">
-        <button class="btn-secondary" onclick="closeModal('modalBackupConfig')">Cancelar</button>
-        <button class="btn-primary" onclick="saveBackupConfig()">Guardar</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- MODAL: Avisos generales -->
+  <!-- MODAL: Avisos (reemplaza alert genérico) -->
   <div id="modalAlert" class="modal-overlay hidden">
     <div class="modal modal-alert">
       <div class="modal-header">
@@ -411,7 +389,6 @@
     </div>
   </div>
 
-  <!-- Script principal -->
   <script src="app.js"></script>
 </body>
 </html>
