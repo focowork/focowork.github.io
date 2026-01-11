@@ -348,6 +348,70 @@ button:hover,
 }
 
 /* ===============================
+   FEINES PER URGÈNCIA (TAREAS)
+   =============================== */
+
+/* Textarea Urgent (Rojo) */
+.workpad-area.urgent {
+  min-height: 90px;
+  max-height: 150px;
+  margin-bottom: 12px;
+  border-left: 4px solid #ef4444;
+  background: rgba(239, 68, 68, 0.05);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.workpad-area.urgent:focus {
+  border-color: rgba(239, 68, 68, 0.6);
+  background: rgba(239, 68, 68, 0.08);
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+}
+
+.workpad-area.urgent::placeholder {
+  color: rgba(239, 68, 68, 0.5);
+}
+
+/* Textarea Important (Naranja) */
+.workpad-area.important {
+  min-height: 90px;
+  max-height: 150px;
+  margin-bottom: 12px;
+  border-left: 4px solid #f59e0b;
+  background: rgba(245, 158, 11, 0.05);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.workpad-area.important:focus {
+  border-color: rgba(245, 158, 11, 0.6);
+  background: rgba(245, 158, 11, 0.08);
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15);
+}
+
+.workpad-area.important::placeholder {
+  color: rgba(245, 158, 11, 0.5);
+}
+
+/* Textarea Later (Verde) */
+.workpad-area.later {
+  min-height: 90px;
+  max-height: 150px;
+  margin-bottom: 12px;
+  border-left: 4px solid #10b981;
+  background: rgba(16, 185, 129, 0.05);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.workpad-area.later:focus {
+  border-color: rgba(16, 185, 129, 0.6);
+  background: rgba(16, 185, 129, 0.08);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+}
+
+.workpad-area.later::placeholder {
+  color: rgba(16, 185, 129, 0.5);
+}
+
+/* ===============================
    GALERÍA DE FOTOS
    =============================== */
 
