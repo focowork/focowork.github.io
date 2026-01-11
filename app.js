@@ -1,21 +1,22 @@
 /*************************************************
- * FOCOWORK – app.js (V3.0 FINAL - COMPLETO)
+ * FOCOWORK – app.js (V3.0 FINAL - COMPLETO Y REPARADO)
  * - Licencias con vinculación por dispositivo
  * - Exportación/Importación completa con imágenes
  * - Backup automático y completo
  * - Protección contra pérdida de datos
  * - Horario de enfoque configurable
  * - Monitoreo de almacenamiento
+ * - Exportación a Google Drive con OAuth moderno (GIS)
+ * - Interruptor para backups automáticos en Drive
  *************************************************/
 
 /* ================= CONFIG ================= */
-
 const WHATSAPP_PHONE = "34649383847";
 const APP_VERSION = "3.0";
-const LICENSE_SECRET = "FW2025-SECURE-KEY-X7Y9Z"; // DEBE COINCIDIR con generador
+const LICENSE_SECRET = "FW2025-SECURE-KEY-X7Y9Z";
+const GOOGLE_CLIENT_ID = '339892728740-ghh878p6g57relsi79cprbti5vac1hd4.apps.googleusercontent.com';
 
-/* ================= ACTIVITIES (INTERNAL KEYS) ================= */
-
+/* ================= ACTIVITIES ================= */
 const ACTIVITIES = {
   WORK: "work",
   PHONE: "phone",
@@ -36,7 +37,6 @@ function activityLabel(act) {
 }
 
 /* ================= HELPERS ================= */
-
 const $ = (id) => document.getElementById(id);
 
 function uid() {
@@ -55,9 +55,7 @@ function todayKey() {
 }
 
 function isWithinFocusSchedule(date = new Date()) {
-  if (!state.focusSchedule || !state.focusSchedule.enabled) {
-    return true;
-  }
+  if (!state.focusSchedule || !state.focusSchedule.enabled) return true;
 
   const [sh, sm] = state.focusSchedule.start.split(":").map(Number);
   const [eh, em] = state.focusSchedule.end.split(":").map(Number);
@@ -69,50 +67,7 @@ function isWithinFocusSchedule(date = new Date()) {
   return minutesNow >= minutesStart && minutesNow <= minutesEnd;
 }
 
-/* ================= SISTEMA DE FIRMA DE LICENCIAS ================= */
-
-async function generateHash(text) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(text + LICENSE_SECRET);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-async function verifyLicenseSignature(license) {
-  if (!license || !license.signature || !license.clientId || !license.clientName) {
-    return false;
-  }
-  
-  const dataToSign = `${license.clientId}-${license.clientName}-${license.expiryDate || 'unlimited'}`;
-  const expectedHash = await generateHash(dataToSign);
-  
-  return license.signature === expectedHash;
-}
-
-/* ================= DEVICE FINGERPRINT ================= */
-
-function getDeviceFingerprint() {
-  const data = [
-    navigator.userAgent,
-    navigator.language,
-    screen.width,
-    screen.height,
-    screen.colorDepth,
-    new Date().getTimezoneOffset()
-  ].join('|');
-  
-  let hash = 0;
-  for (let i = 0; i < data.length; i++) {
-    const char = data.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash;
-  }
-  return 'DEV-' + Math.abs(hash).toString(36).toUpperCase();
-}
-
 /* ================= MODALES ================= */
-
 function openModal(id) {
   const modal = $(id);
   if (modal) modal.classList.remove('hidden');
@@ -131,11 +86,9 @@ function showAlert(title, message, icon = 'ℹ️') {
 }
 
 /* ================= USER ================= */
-
 let userName = localStorage.getItem("focowork_user_name") || "Usuario";
 
 /* ================= STATE ================= */
-
 let state = JSON.parse(localStorage.getItem("focowork_state")) || {
   isFull: false,
   license: null,
@@ -146,262 +99,157 @@ let state = JSON.parse(localStorage.getItem("focowork_state")) || {
   sessionElapsed: 0,
   clients: {},
   focus: {},
-  focusSchedule: {
-    enabled: false,
-    start: "09:00",
-    end: "17:00"
-  }
+  focusSchedule: { enabled: false, start: "09:00", end: "17:00" },
+  autoDriveBackup: false
 };
 
 function save() {
   localStorage.setItem("focowork_state", JSON.stringify(state));
-  
-  if (state.currentClientId) {
-    scheduleAutoBackup();
-  }
+  if (state.currentClientId) scheduleAutoBackup();
 }
 
 /* ================= AUTO-BACKUP ================= */
-
 let autoBackupTimeout = null;
 
 function scheduleAutoBackup() {
   clearTimeout(autoBackupTimeout);
-  
   autoBackupTimeout = setTimeout(() => {
-    if (state.currentClientId && state.clients[state.currentClientId]) {
-      performAutoBackup();
-    }
+    if (state.currentClientId && state.clients[state.currentClientId]) performAutoBackup();
   }, 300000);
 }
 
 function performAutoBackup() {
   const client = state.clients[state.currentClientId];
   if (!client) return;
-  
+
   const backup = {
     version: APP_VERSION,
     timestamp: new Date().toISOString(),
     client: client
   };
-  
-  const backupKey = `focowork_autobackup_${client.id}`;
+
   try {
-    localStorage.setItem(backupKey, JSON.stringify(backup));
+    localStorage.setItem(`focowork_autobackup_${client.id}`, JSON.stringify(backup));
   } catch (e) {
     console.warn('Auto-backup falló:', e);
   }
 }
 
-/* ================= DAILY RESET ================= */
-
-function resetDayIfNeeded() {
-  if (state.day !== todayKey()) {
-    state.day = todayKey();
-    state.focus = {};
-    save();
-  }
-}
-
-/* ================= SISTEMA DE LICENCIAS CON DISPOSITIVOS ================= */
-
-async function loadLicenseFile() {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = '.focowork,.json';
-  
-  input.onchange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    
-    try {
-      const text = await file.text();
-      const license = JSON.parse(text);
-      
-      if (!license.signature || !license.clientId) {
-        showAlert('Archivo inválido', 'Este no es un archivo de licencia válido', '❌');
-        return;
-      }
-      
-      const isValid = await verifyLicenseSignature(license);
-      
-      if (!isValid) {
-        showAlert('Licencia inválida', 'El archivo de licencia no es válido o ha sido modificado', '❌');
-        return;
-      }
-      
-      if (license.expiryDate) {
-        const expiry = new Date(license.expiryDate);
-        if (expiry < new Date()) {
-          showAlert('Licencia caducada', 'Esta licencia ha expirado el ' + expiry.toLocaleDateString(), '⏰');
-          return;
-        }
-      }
-      
-      // Verificar dispositivos
-      const currentDevice = getDeviceFingerprint();
-      const maxDevices = license.maxDevices || 1;
-      
-      if (!license.devices) {
-        license.devices = [];
-      }
-      
-      const deviceIndex = license.devices.findIndex(d => d.id === currentDevice);
-      
-      if (deviceIndex === -1) {
-        if (license.devices.length >= maxDevices) {
-          const devicesList = license.devices.map((d, i) => 
-            `${i+1}. ${d.id} (${new Date(d.activationDate).toLocaleDateString()})`
-          ).join('\n');
-          
-          showAlert(
-            'Límite de dispositivos',
-            `Esta licencia ya está activada en ${maxDevices} dispositivo(s):\n\n${devicesList}\n\nContacta con soporte si necesitas cambiar de dispositivo.`,
-            '🔒'
-          );
-          return;
-        }
-        
-        license.devices.push({
-          id: currentDevice,
-          activationDate: new Date().toISOString()
-        });
-      }
-      
-      state.isFull = true;
-      state.license = license;
-      save();
-      updateUI();
-      
-      const expiryText = license.expiryDate 
-        ? `Válida hasta: ${new Date(license.expiryDate).toLocaleDateString()}`
-        : 'Sin límite de tiempo';
-      
-      const deviceInfo = `\n\nDispositivo ${license.devices.length}/${maxDevices}: ${currentDevice}`;
-      
-      showAlert(
-        '¡Licencia activada!', 
-        `FocoWork completo activado\n\nCliente: ${license.clientName}\n${expiryText}${deviceInfo}\n\n¡Disfruta de clientes ilimitados!`,
-        '🎉'
-      );
-      
-    } catch (err) {
-      showAlert('Error', 'No se pudo leer el archivo de licencia', '❌');
-    }
+/* ================= BACKUPS AUTOMÁTICOS A MEDIANOCHE ================= */
+function performFullAutoBackup() {
+  const backup = {
+    version: APP_VERSION,
+    timestamp: new Date().toISOString(),
+    userName: userName,
+    state: JSON.parse(JSON.stringify(state)),
+    type: 'full_backup'
   };
-  
-  input.click();
+
+  try {
+    localStorage.setItem('focowork_full_autobackup', JSON.stringify(backup));
+  } catch (e) {
+    console.warn('Backup completo automático fallido:', e);
+  }
+
+  if (state.autoDriveBackup) exportAllToDrive(true);
+
+  setTimeout(performFullAutoBackup, 24 * 60 * 60 * 1000);
 }
 
-function requestLicense() {
-  const msg = `Hola, necesito una licencia de FocoWork completo`;
-  window.open(`https://wa.me/${WHATSAPP_PHONE}?text=${encodeURIComponent(msg)}`);
+function scheduleFullAutoBackup() {
+  const now = new Date();
+  const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0);
+  setTimeout(performFullAutoBackup, nextMidnight - now);
 }
 
-/* ================= EXPORTACIÓN/IMPORTACIÓN INDIVIDUAL ================= */
+/* ================= GOOGLE DRIVE (GIS MODERNO) ================= */
+let googleTokenClient = null;
+let googleAccessToken = null;
+let googleInitialized = false;
 
-function exportCurrentWork() {
-  const client = state.clients[state.currentClientId];
-  if (!client) {
-    showAlert('Sin cliente', 'Selecciona un cliente primero', '⚠️');
+function initGoogleDrive() {
+  if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
+    console.log('Google Identity Services aún no disponible');
+    googleInitialized = false;
     return;
   }
-  
-  const workData = {
-    version: APP_VERSION,
-    exportDate: new Date().toISOString(),
-    client: client,
-    userName: userName
-  };
-  
-  const dataStr = JSON.stringify(workData, null, 2);
-  const blob = new Blob([dataStr], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `trabajo_${client.name.replace(/[^a-z0-9]/gi, '_')}_${todayKey()}.focowork`;
-  a.click();
-  
-  URL.revokeObjectURL(url);
-  
-  showAlert('Trabajo guardado', 'El archivo se ha descargado correctamente.\n\n¡Guárdalo en lugar seguro!', '💾');
-}
 
-function importWork() {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = '.focowork,.json';
-  
-  input.onchange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  try {
+    console.log('Inicializando Google Drive...');
+    googleTokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID,
+      scope: 'https://www.googleapis.com/auth/drive.file',
+      callback: (tokenResponse) => {
+        if (tokenResponse && tokenResponse.access_token) {
+          googleAccessToken = tokenResponse.access_token;
+          console.log('✅ Token de acceso obtenido');
+          googleInitialized = true;
+          
+          // Si hay una subida pendiente, ejecutarla
+          if (window.pendingDriveUpload) {
+            uploadToDriveNow(window.pendingDriveUpload.autoMode);
+            window.pendingDriveUpload = null;
+          }
+        } else if (tokenResponse.error) {
+          console.error('❌ Error obteniendo token:', tokenResponse);
+          if (!window.pendingDriveUpload?.autoMode) {
+            showAlert('Error de autenticación', 'No se pudo conectar con Google Drive. Intenta de nuevo.', '❌');
+          }
+        }
+      }
+    });
     
+    googleInitialized = true;
+    console.log('✅ Google Drive inicializado correctamente');
+  } catch (error) {
+    console.error('❌ Error en initGoogleDrive:', error);
+    googleInitialized = false;
+  }
+}
+
+async function exportAllToDrive(autoMode = false) {
+  // Verificar que Google esté disponible
+  if (!googleInitialized) {
+    console.log('Reintentando inicialización de Google Drive...');
     try {
-      const text = await file.text();
-      const fileData = JSON.parse(text);
-      
-      // Detectar tipo de archivo
-      if (fileData.type === 'full_backup') {
-        handleBackupFile(fileData);
-        return;
-      }
-      
-      // Es un trabajo individual
-      if (!fileData.client || !fileData.version) {
-        showAlert('Archivo inválido', 'Este archivo no es un trabajo válido de FocoWork', '❌');
-        return;
-      }
-      
-      $('importClientName').textContent = fileData.client.name;
-      $('importClientTime').textContent = formatTime(fileData.client.total);
-      $('importClientPhotos').textContent = fileData.client.photos.length;
-      $('importClientNotes').textContent = fileData.client.notes ? '✓ Sí' : '— No';
-      
-      window.pendingImport = fileData;
-      
-      openModal('modalImportWork');
-      
-    } catch (err) {
-      showAlert('Error', 'No se pudo leer el archivo', '❌');
+      await loadGoogleScript();
+      initGoogleDrive();
+      // Esperar un momento para que se inicialice
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    } catch (e) {
+      console.error('Error cargando Google:', e);
     }
-  };
-  
-  input.click();
+  }
+
+  if (!googleTokenClient || !googleInitialized) {
+    if (!autoMode) {
+      showAlert('Error', 'Google Drive no está disponible.\n\nVerifica tu conexión a internet y recarga la app.', '❌');
+    }
+    return;
+  }
+
+  if (!googleAccessToken) {
+    // Guardar que hay una subida pendiente
+    window.pendingDriveUpload = { autoMode };
+    
+    if (!autoMode) {
+      showAlert('Autorizando...', 'Se abrirá una ventana para autorizar el acceso a Google Drive.', 'ℹ️');
+      setTimeout(() => {
+        try {
+          googleTokenClient.requestAccessToken({ prompt: 'consent' });
+        } catch (e) {
+          console.error('Error al solicitar token:', e);
+          showAlert('Error', 'No se pudo solicitar autorización. Intenta de nuevo.', '❌');
+        }
+      }, 500);
+    }
+    return;
+  }
+
+  uploadToDriveNow(autoMode);
 }
 
-function confirmImport() {
-  if (!window.pendingImport) return;
-  
-  const workData = window.pendingImport;
-  const newId = uid();
-  
-  state.clients[newId] = {
-    ...workData.client,
-    id: newId,
-    active: true
-  };
-  
-  state.currentClientId = newId;
-  state.currentActivity = ACTIVITIES.WORK;
-  state.sessionElapsed = 0;
-  state.lastTick = Date.now();
-  isWorkpadInitialized = false;
-  
-  save();
-  updateUI();
-  closeModal('modalImportWork');
-  
-  showAlert('Trabajo importado', `Cliente "${workData.client.name}" importado correctamente\n\nTiempo: ${formatTime(workData.client.total)}\nFotos: ${workData.client.photos.length}`, '✅');
-  
-  window.pendingImport = null;
-}
-
-/* ================= BACKUP COMPLETO ================= */
-
-function exportAllData() {
-  const dataSize = getStorageSize();
-  
+async function uploadToDriveNow(autoMode = false) {
   const exportData = {
     version: APP_VERSION,
     exportDate: new Date().toISOString(),
@@ -410,18 +258,307 @@ function exportAllData() {
     license: state.license,
     type: 'full_backup'
   };
-  
+
+  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+
+  const metadata = {
+    name: `focowork_completo_${todayKey()}.focowork`,
+    mimeType: 'application/json'
+  };
+
+  const form = new FormData();
+  form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+  form.append('file', blob);
+
+  try {
+    console.log('📤 Subiendo archivo a Drive...');
+    const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${googleAccessToken}` },
+      body: form
+    });
+
+    const responseData = await res.json();
+
+    if (!res.ok) {
+      console.error('❌ Error de Drive:', responseData);
+      throw new Error(responseData.error?.message || 'Error subiendo a Drive');
+    }
+
+    console.log('✅ Archivo subido exitosamente:', responseData);
+    if (!autoMode) {
+      showAlert('✅ Exportado a Drive', `Backup subido correctamente a Google Drive\n\nArchivo: ${metadata.name}`, '✅');
+    }
+  } catch (err) {
+    console.error('❌ Error en subida a Drive:', err);
+    if (!autoMode) {
+      showAlert('Error Drive', `No se pudo subir a Drive:\n${err.message}\n\nIntenta de nuevo o usa la exportación local.`, '❌');
+    }
+  }
+}
+
+// Cargar Google Identity Services dinámicamente
+function loadGoogleScript() {
+  return new Promise((resolve, reject) => {
+    if (typeof google !== 'undefined' && google.accounts) {
+      resolve();
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    
+    script.onload = () => {
+      console.log('Google script cargado');
+      setTimeout(() => resolve(), 500);
+    };
+    
+    script.onerror = () => {
+      console.error('Error cargando Google script');
+      reject(new Error('No se pudo cargar Google Identity Services'));
+    };
+    
+    document.head.appendChild(script);
+  });
+}
+
+/* ================= CONFIGURACIÓN DE BACKUPS ================= */
+function openBackupConfigModal() {
+  const checkbox = $('autoDriveBackupCheckbox');
+  if (checkbox) checkbox.checked = state.autoDriveBackup;
+  openModal('modalBackupConfig');
+}
+
+function saveBackupConfig() {
+  const checkbox = $('autoDriveBackupCheckbox');
+  if (checkbox) {
+    state.autoDriveBackup = checkbox.checked;
+    save();
+    closeModal('modalBackupConfig');
+    showAlert('Configuración guardada', state.autoDriveBackup ? 'Backups automáticos en Drive activados' : 'Backups automáticos en Drive desactivados', '✅');
+  }
+}
+
+/* ================= DAILY RESET ================= */
+function resetDayIfNeeded() {
+  if (state.day !== todayKey()) {
+    state.day = todayKey();
+    state.focus = {};
+    save();
+  }
+}
+
+/* ================= SISTEMA DE LICENCIAS ================= */
+async function loadLicenseFile() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.focowork,.json';
+
+  input.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const license = JSON.parse(text);
+
+      if (!license.signature || !license.clientId) {
+        showAlert('Archivo inválido', 'Este no es un archivo de licencia válido', '❌');
+        return;
+      }
+
+      const isValid = await verifyLicenseSignature(license);
+      if (!isValid) {
+        showAlert('Licencia inválida', 'El archivo de licencia no es válido o ha sido modificado', '❌');
+        return;
+      }
+
+      if (license.expiryDate) {
+        const expiry = new Date(license.expiryDate);
+        if (expiry < new Date()) {
+          showAlert('Licencia caducada', 'Esta licencia ha expirado el ' + expiry.toLocaleDateString(), '⏰');
+          return;
+        }
+      }
+
+      const currentDevice = getDeviceFingerprint();
+      const maxDevices = license.maxDevices || 1;
+
+      if (!license.devices) license.devices = [];
+
+      const deviceIndex = license.devices.findIndex(d => d.id === currentDevice);
+
+      if (deviceIndex === -1) {
+        if (license.devices.length >= maxDevices) {
+          const devicesList = license.devices.map((d, i) =>
+            `${i+1}. ${d.id} (${new Date(d.activationDate).toLocaleDateString()})`
+          ).join('\n');
+
+          showAlert(
+            'Límite de dispositivos',
+            `Esta licencia ya está activada en ${maxDevices} dispositivo(s):\n\n${devicesList}\n\nContacta con soporte si necesitas cambiar de dispositivo.`,
+            '🔒'
+          );
+          return;
+        }
+
+        license.devices.push({
+          id: currentDevice,
+          activationDate: new Date().toISOString()
+        });
+      }
+
+      state.isFull = true;
+      state.license = license;
+      save();
+      updateUI();
+
+      const expiryText = license.expiryDate
+        ? `Válida hasta: ${new Date(license.expiryDate).toLocaleDateString()}`
+        : 'Sin límite de tiempo';
+
+      const deviceInfo = `\n\nDispositivo ${license.devices.length}/${maxDevices}: ${currentDevice}`;
+
+      showAlert(
+        '¡Licencia activada!',
+        `FocoWork completo activado\n\nCliente: ${license.clientName}\n${expiryText}${deviceInfo}\n\n¡Disfruta de clientes ilimitados!`,
+        '🎉'
+      );
+    } catch (err) {
+      showAlert('Error', 'No se pudo leer el archivo de licencia', '❌');
+    }
+  };
+
+  input.click();
+}
+
+function requestLicense() {
+  const msg = `Hola, necesito una licencia de FocoWork completo`;
+  window.open(`https://wa.me/${WHATSAPP_PHONE}?text=${encodeURIComponent(msg)}`);
+}
+
+/* ================= EXPORTACIÓN/IMPORTACIÓN ================= */
+function exportCurrentWork() {
+  const client = state.clients[state.currentClientId];
+  if (!client) {
+    showAlert('Sin cliente', 'Selecciona un cliente primero', '⚠️');
+    return;
+  }
+
+  const workData = {
+    version: APP_VERSION,
+    exportDate: new Date().toISOString(),
+    client: client,
+    userName: userName
+  };
+
+  const dataStr = JSON.stringify(workData, null, 2);
+  const blob = new Blob([dataStr], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `trabajo_${client.name.replace(/[^a-z0-9]/gi, '_')}_${todayKey()}.focowork`;
+  a.click();
+
+  URL.revokeObjectURL(url);
+
+  showAlert('Trabajo guardado', 'El archivo se ha descargado correctamente.\n\n¡Guárdalo en lugar seguro!', '💾');
+}
+
+function importWork() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.focowork,.json';
+
+  input.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const fileData = JSON.parse(text);
+
+      if (fileData.type === 'full_backup') {
+        handleBackupFile(fileData);
+        return;
+      }
+
+      if (!fileData.client || !fileData.version) {
+        showAlert('Archivo inválido', 'Este archivo no es un trabajo válido de FocoWork', '❌');
+        return;
+      }
+
+      $('importClientName').textContent = fileData.client.name;
+      $('importClientTime').textContent = formatTime(fileData.client.total);
+      $('importClientPhotos').textContent = fileData.client.photos.length;
+      $('importClientNotes').textContent = fileData.client.notes ? '✓ Sí' : '— No';
+
+      window.pendingImport = fileData;
+
+      openModal('modalImportWork');
+    } catch (err) {
+      showAlert('Error', 'No se pudo leer el archivo', '❌');
+    }
+  };
+
+  input.click();
+}
+
+function confirmImport() {
+  if (!window.pendingImport) return;
+
+  const workData = window.pendingImport;
+  const newId = uid();
+
+  state.clients[newId] = {
+    ...workData.client,
+    id: newId,
+    active: true
+  };
+
+  state.currentClientId = newId;
+  state.currentActivity = ACTIVITIES.WORK;
+  state.sessionElapsed = 0;
+  state.lastTick = Date.now();
+  isWorkpadInitialized = false;
+  areTasksInitialized = false;
+
+  save();
+  updateUI();
+  closeModal('modalImportWork');
+
+  showAlert('Trabajo importado', `Cliente "${workData.client.name}" importado correctamente\n\nTiempo: ${formatTime(workData.client.total)}\nFotos: ${workData.client.photos.length}`, '✅');
+
+  window.pendingImport = null;
+}
+
+/* ================= BACKUP COMPLETO ================= */
+function exportAllData() {
+  const dataSize = getStorageSize();
+
+  const exportData = {
+    version: APP_VERSION,
+    exportDate: new Date().toISOString(),
+    userName: userName,
+    state: state,
+    license: state.license,
+    type: 'full_backup'
+  };
+
   const dataStr = JSON.stringify(exportData, null, 2);
   const blob = new Blob([dataStr], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
-  
+
   const a = document.createElement('a');
   a.href = url;
   a.download = `focowork_completo_${todayKey()}.focowork`;
   a.click();
-  
+
   URL.revokeObjectURL(url);
-  
+
   showAlert('Backup completo', `Todos tus datos han sido exportados.\n\nTamaño: ${dataSize}\n\n¡Guarda este archivo en lugar seguro!`, '💾');
 }
 
@@ -430,57 +567,50 @@ function handleBackupFile(backupData) {
     showAlert('Archivo inválido', 'Este archivo de backup está corrupto', '❌');
     return;
   }
-  
+
   const clientCount = Object.keys(backupData.state.clients).length;
   const activeCount = Object.values(backupData.state.clients).filter(c => c.active).length;
-  
+
   $('importBackupClients').textContent = clientCount;
   $('importBackupActive').textContent = activeCount;
   $('importBackupDate').textContent = new Date(backupData.exportDate).toLocaleDateString();
   $('importBackupLicense').textContent = backupData.license ? '✓ Sí' : '— No';
-  
+
   window.pendingBackup = backupData;
-  
+
   openModal('modalImportBackup');
 }
 
 function confirmImportBackup() {
   if (!window.pendingBackup) return;
-  
+
   const backupData = window.pendingBackup;
-  
-  if (backupData.state) {
-    state = backupData.state;
-  }
-  
+
+  if (backupData.state) state = backupData.state;
   if (backupData.userName) {
     userName = backupData.userName;
     localStorage.setItem("focowork_user_name", userName);
   }
-  
   if (backupData.license) {
     state.license = backupData.license;
     state.isFull = true;
   }
-  
+
   isWorkpadInitialized = false;
-  
+
   save();
   updateUI();
   closeModal('modalImportBackup');
-  
+
   const clientCount = Object.keys(state.clients).length;
   showAlert('Backup restaurado', `✅ Backup completo restaurado correctamente\n\n${clientCount} clientes recuperados\nLicencia: ${state.license ? 'Activada' : 'No incluida'}`, '🎉');
-  
+
   window.pendingBackup = null;
-  
-  setTimeout(() => {
-    location.reload();
-  }, 2000);
+
+  setTimeout(() => location.reload(), 2000);
 }
 
 /* ================= UTILIDADES DE ALMACENAMIENTO ================= */
-
 function getStorageSize() {
   let total = 0;
   for (let key in localStorage) {
@@ -488,14 +618,10 @@ function getStorageSize() {
       total += localStorage[key].length + key.length;
     }
   }
-  
-  if (total < 1024) {
-    return total + ' bytes';
-  } else if (total < 1024 * 1024) {
-    return (total / 1024).toFixed(2) + ' KB';
-  } else {
-    return (total / (1024 * 1024)).toFixed(2) + ' MB';
-  }
+
+  if (total < 1024) return total + ' bytes';
+  if (total < 1024 * 1024) return (total / 1024).toFixed(2) + ' KB';
+  return (total / (1024 * 1024)).toFixed(2) + ' MB';
 }
 
 function showStorageInfo() {
@@ -503,14 +629,12 @@ function showStorageInfo() {
   const clientCount = Object.keys(state.clients).length;
   const activeCount = Object.values(state.clients).filter(c => c.active).length;
   const closedCount = clientCount - activeCount;
-  
+
   let totalPhotos = 0;
-  Object.values(state.clients).forEach(c => {
-    totalPhotos += c.photos.length;
-  });
-  
+  Object.values(state.clients).forEach(c => totalPhotos += c.photos.length);
+
   const avgPhotoSize = totalPhotos > 0 ? '~' + (parseFloat(size) / totalPhotos).toFixed(0) + ' KB/foto' : 'N/A';
-  
+
   showAlert(
     'Uso de almacenamiento',
     `📊 Espacio usado: ${size}\n\n` +
@@ -532,7 +656,6 @@ function resetTodayFocus() {
 }
 
 /* ================= TIME ENGINE ================= */
-
 function tick() {
   resetDayIfNeeded();
 
@@ -550,18 +673,14 @@ function tick() {
   state.sessionElapsed += elapsed;
   client.total += elapsed;
 
-  client.activities[state.currentActivity] =
-    (client.activities[state.currentActivity] || 0) + elapsed;
+  client.activities[state.currentActivity] = (client.activities[state.currentActivity] || 0) + elapsed;
 
-  // Solo sumar al enfoque si está dentro del horario O si el horario está desactivado
   if (state.focusSchedule.enabled) {
     if (isWithinFocusSchedule()) {
-      state.focus[state.currentActivity] =
-        (state.focus[state.currentActivity] || 0) + elapsed;
+      state.focus[state.currentActivity] = (state.focus[state.currentActivity] || 0) + elapsed;
     }
   } else {
-    state.focus[state.currentActivity] =
-      (state.focus[state.currentActivity] || 0) + elapsed;
+    state.focus[state.currentActivity] = (state.focus[state.currentActivity] || 0) + elapsed;
   }
 
   save();
@@ -571,7 +690,6 @@ function tick() {
 setInterval(tick, 1000);
 
 /* ================= ACTIVIDADES ================= */
-
 function setActivity(activity) {
   const client = state.clients[state.currentClientId];
   if (!client || !client.active) {
@@ -586,15 +704,14 @@ function setActivity(activity) {
   updateUI();
 }
 
-/* ================= WORKPAD (NOTAS) ================= */
-
+/* ================= WORKPAD ================= */
 let workpadTimeout = null;
 let isWorkpadInitialized = false;
 
 function updateWorkpad() {
   const workpadArea = $('clientWorkpad');
   const client = state.clients[state.currentClientId];
-  
+
   if (!workpadArea || !client) {
     if (workpadArea) {
       workpadArea.style.display = 'none';
@@ -604,12 +721,12 @@ function updateWorkpad() {
   }
 
   workpadArea.style.display = 'block';
-  
+
   const savedNote = client.notes || '';
   if (workpadArea.value !== savedNote && !isWorkpadInitialized) {
     workpadArea.value = savedNote;
   }
-  
+
   if (!isWorkpadInitialized) {
     workpadArea.oninput = handleWorkpadInput;
     isWorkpadInitialized = true;
@@ -622,69 +739,50 @@ function handleWorkpadInput(e) {
 
   client.notes = e.target.value;
   clearTimeout(workpadTimeout);
-
-  workpadTimeout = setTimeout(() => {
-    save();
-  }, 1000);
+  workpadTimeout = setTimeout(save, 1000);
 }
 
 /* ================= UI ================= */
-
 function updateUI() {
-  const client = state.currentClientId
-    ? state.clients[state.currentClientId]
-    : null;
+  const client = state.currentClientId ? state.clients[state.currentClientId] : null;
 
-  $("clientName").textContent = client
-    ? `Cliente: ${client.name}${client.active ? "" : " (cerrado)"}`
-    : "Sin cliente activo";
+  $("clientName").textContent = client ? `Cliente: ${client.name}${client.active ? "" : " (cerrado)"}` : "Sin cliente activo";
 
-  $("activityName").textContent = state.currentActivity 
-    ? activityLabel(state.currentActivity) 
-    : "—";
-  
-  $("timer").textContent =
-    client && client.active ? formatTime(state.sessionElapsed) : "00:00:00";
+  $("activityName").textContent = state.currentActivity ? activityLabel(state.currentActivity) : "—";
+
+  $("timer").textContent = client && client.active ? formatTime(state.sessionElapsed) : "00:00:00";
 
   if ($("clientTotal")) {
-    $("clientTotal").textContent = client
-      ? `Total cliente: ${formatTime(client.total)}`
-      : "";
+    $("clientTotal").textContent = client ? `Total cliente: ${formatTime(client.total)}` : "";
   }
 
   document.querySelectorAll(".activity").forEach(btn => {
-    btn.classList.toggle(
-      "active",
-      btn.dataset.activity === state.currentActivity
-    );
+    btn.classList.toggle("active", btn.dataset.activity === state.currentActivity);
   });
 
   $("cameraBtn").style.display = client && client.active ? "block" : "none";
 
   const deleteBtn = $("deleteClientBtn");
-  if (deleteBtn) {
-    deleteBtn.style.display = client && !client.active ? "block" : "none";
-  }
+  if (deleteBtn) deleteBtn.style.display = client && !client.active ? "block" : "none";
 
   $("versionBox").style.display = state.isFull ? "none" : "block";
 
-  if (state.isFull && state.license) {
-    updateLicenseInfo();
-  }
+  if (state.isFull && state.license) updateLicenseInfo();
 
   updateFocusScheduleStatus();
   updateWorkpad();
+  updateTasks();
   renderPhotoGallery();
 }
 
 function updateLicenseInfo() {
   const infoEl = $("licenseInfo");
   if (!infoEl || !state.license) return;
-  
-  const expiryText = state.license.expiryDate 
+
+  const expiryText = state.license.expiryDate
     ? `Válida hasta: ${new Date(state.license.expiryDate).toLocaleDateString()}`
     : 'Sin límite';
-  
+
   infoEl.textContent = `✓ Licencia activa - ${state.license.clientName} - ${expiryText}`;
   infoEl.style.display = 'block';
 }
@@ -702,7 +800,6 @@ function updateFocusScheduleStatus() {
 }
 
 /* ================= CLIENTES ================= */
-
 function newClient() {
   const activeClients = Object.values(state.clients).filter(c => c.active);
   if (!state.isFull && activeClients.length >= 2) {
@@ -712,7 +809,7 @@ function newClient() {
 
   $('inputNewClient').value = '';
   openModal('modalNewClient');
-  
+
   setTimeout(() => $('inputNewClient').focus(), 300);
 }
 
@@ -728,7 +825,12 @@ function confirmNewClient() {
     total: 0,
     activities: {},
     photos: [],
-    notes: ""
+    notes: "",
+    tasks: {
+      urgent: "",
+      important: "",
+      later: ""
+    }
   };
 
   state.currentClientId = id;
@@ -736,6 +838,7 @@ function confirmNewClient() {
   state.sessionElapsed = 0;
   state.lastTick = Date.now();
   isWorkpadInitialized = false;
+  areTasksInitialized = false;
 
   save();
   updateUI();
@@ -772,6 +875,7 @@ function selectClient(clientId) {
   state.sessionElapsed = 0;
   state.lastTick = Date.now();
   isWorkpadInitialized = false;
+  areTasksInitialized = false;
 
   save();
   updateUI();
@@ -783,17 +887,17 @@ function closeClient() {
   if (!client) return;
 
   if (client.photos.length > 0 || (client.notes && client.notes.trim())) {
-    $('exportBeforeCloseText').textContent = 
+    $('exportBeforeCloseText').textContent =
       `Este cliente tiene ${client.photos.length} fotos y notas.\n\n¿Deseas exportar el trabajo antes de cerrar?`;
-    
+
     window.clientToClose = client.id;
     openModal('modalExportBeforeClose');
     return;
   }
 
-  $('closeClientText').textContent = 
+  $('closeClientText').textContent =
     `Cliente: ${client.name}\nTiempo total: ${formatTime(client.total)}`;
-  
+
   openModal('modalCloseClient');
 }
 
@@ -808,27 +912,24 @@ function confirmCloseClient() {
   state.currentActivity = null;
   state.lastTick = null;
   isWorkpadInitialized = false;
+  areTasksInitialized = false;
 
   save();
   updateUI();
   closeModal('modalCloseClient');
   closeModal('modalExportBeforeClose');
-  
+
   showAlert('Cliente cerrado', `${client.name}\nTiempo total: ${formatTime(client.total)}`, '✅');
-  
+
   window.clientToClose = null;
 }
 
 function exportAndClose() {
   exportCurrentWork();
-  
-  setTimeout(() => {
-    confirmCloseClient();
-  }, 500);
+  setTimeout(confirmCloseClient, 500);
 }
 
 /* ================= HISTÓRICO ================= */
-
 function showHistory() {
   const closed = Object.values(state.clients).filter(c => !c.active);
   if (!closed.length) {
@@ -852,11 +953,11 @@ function renderHistoryList(clients) {
   clients.forEach(client => {
     const item = document.createElement('div');
     item.className = 'client-item';
-    
-    const notesPreview = client.notes && client.notes.trim() 
+
+    const notesPreview = client.notes && client.notes.trim()
       ? ` • ${client.notes.slice(0, 30)}${client.notes.length > 30 ? '...' : ''}`
       : '';
-    
+
     item.innerHTML = `
       <div class="client-name">${client.name}</div>
       <div class="client-time">Total: ${formatTime(client.total)} • ${client.photos.length} fotos${notesPreview}</div>
@@ -872,29 +973,29 @@ function selectHistoryClient(clientId) {
   state.sessionElapsed = 0;
   state.lastTick = null;
   isWorkpadInitialized = false;
+  areTasksInitialized = false;
 
   updateUI();
   closeModal('modalHistory');
 }
 
 /* ================= BORRAR CLIENTE ================= */
-
 function deleteCurrentClient() {
   const client = state.clients[state.currentClientId];
   if (!client || client.active) return;
 
-  $('deleteClientText').textContent = 
+  $('deleteClientText').textContent =
     `Cliente: ${client.name}\nTiempo: ${formatTime(client.total)}\nFotos: ${client.photos.length}\n\nEsta acción no se puede deshacer.`;
-  
+
   $('inputDeleteConfirm').value = '';
   openModal('modalDeleteClient');
-  
+
   setTimeout(() => $('inputDeleteConfirm').focus(), 300);
 }
 
 function confirmDeleteClient() {
   const confirm = $('inputDeleteConfirm').value.trim().toUpperCase();
-  
+
   if (confirm !== 'BORRAR') {
     showAlert('Error', 'Debes escribir BORRAR para confirmar', '⚠️');
     return;
@@ -905,16 +1006,16 @@ function confirmDeleteClient() {
   state.currentActivity = null;
   state.lastTick = null;
   isWorkpadInitialized = false;
+  areTasksInitialized = false;
 
   save();
   updateUI();
   closeModal('modalDeleteClient');
-  
+
   showAlert('Cliente eliminado', 'El cliente ha sido eliminado definitivamente', '🗑️');
 }
 
 /* ================= FOTOS ================= */
-
 let photoToDelete = null;
 
 function addPhotoToClient() {
@@ -981,11 +1082,7 @@ function renderPhotoGallery() {
 
       img.onclick = () => {
         const w = window.open();
-        if (w) {
-          w.document.write(
-            `<img src="${p.data}" style="width:100%;background:#000">`
-          );
-        }
+        if (w) w.document.write(`<img src="${p.data}" style="width:100%;background:#000">`);
       };
 
       img.oncontextmenu = (e) => {
@@ -1006,14 +1103,13 @@ function confirmDeletePhoto() {
 
   client.photos = client.photos.filter(f => f.id !== photoToDelete);
   photoToDelete = null;
-  
+
   save();
   renderPhotoGallery();
   closeModal('modalDeletePhoto');
 }
 
 /* ================= ENFOQUE ================= */
-
 function showFocus() {
   const total = Object.values(state.focus).reduce((a, b) => a + b, 0);
   if (!total) {
@@ -1026,14 +1122,14 @@ function showFocus() {
 
   $('modalUserName').textContent = userName;
   $('modalTotalTime').textContent = formatTime(total);
-  
+
   const list = $('modalActivityList');
   list.innerHTML = '';
-  
+
   for (const act in state.focus) {
     const seconds = state.focus[act];
     const actPct = Math.round((seconds / total) * 100);
-    
+
     const item = document.createElement('div');
     item.className = 'activity-item';
     item.innerHTML = `
@@ -1062,7 +1158,6 @@ function showFocus() {
 }
 
 /* ================= CSV ================= */
-
 function exportTodayCSV() {
   let csv = "Usuario,Cliente,Tiempo,Notas\n";
   Object.values(state.clients).forEach(c => {
@@ -1075,12 +1170,11 @@ function exportTodayCSV() {
   a.href = URL.createObjectURL(blob);
   a.download = `focowork_${todayKey()}.csv`;
   a.click();
-  
+
   showAlert('CSV exportado', 'El archivo se ha descargado correctamente', '📄');
 }
 
 /* ================= CONFIGURACIÓN DE HORARIO ================= */
-
 function openScheduleModal() {
   const checkbox = $('scheduleEnabled');
   const config = $('scheduleConfig');
@@ -1149,8 +1243,8 @@ function saveScheduleConfig() {
 
   save();
   closeModal('modalSchedule');
-  
-  const message = enabled 
+
+  const message = enabled
     ? `Horario activado: ${start} - ${end}\n\nEl enfoque solo contabilizará tiempo dentro de este horario.`
     : 'Horario desactivado\n\nEl enfoque contabilizará todo el tiempo trabajado.';
 
@@ -1158,10 +1252,15 @@ function saveScheduleConfig() {
 }
 
 /* ================= EVENT LISTENERS ================= */
+document.addEventListener('DOMContentLoaded', async () => {
+  // Cargar Google Script primero
+  try {
+    await loadGoogleScript();
+    initGoogleDrive();
+  } catch (e) {
+    console.error('Error inicializando Google Drive:', e);
+  }
 
-document.addEventListener('DOMContentLoaded', () => {
-
-  // BOTONES PRINCIPALES
   $('newClient').onclick = newClient;
   $('changeClient').onclick = changeClient;
   $('historyBtn').onclick = showHistory;
@@ -1172,15 +1271,15 @@ document.addEventListener('DOMContentLoaded', () => {
   $('cameraBtn').onclick = addPhotoToClient;
   $('deleteClientBtn').onclick = deleteCurrentClient;
 
-  // NUEVOS BOTONES - BACKUP Y LICENCIAS
   if ($('exportWorkBtn')) $('exportWorkBtn').onclick = exportCurrentWork;
   if ($('importWorkBtn')) $('importWorkBtn').onclick = importWork;
   if ($('exportAllBtn')) $('exportAllBtn').onclick = exportAllData;
   if ($('loadLicenseBtn')) $('loadLicenseBtn').onclick = loadLicenseFile;
   if ($('requestLicenseBtn')) $('requestLicenseBtn').onclick = requestLicense;
-  if ($('storageBtn')) $('storageBtn').onclick = showStorageInfo;
+  if ($('exportToDriveBtn')) $('exportToDriveBtn').onclick = () => exportAllToDrive(false);
+  if ($('backupConfigBtn')) $('backupConfigBtn').onclick = openBackupConfigModal;
 
-  // Pulsación larga en botón Enfoque para resetear
+  // Pulsación larga en botón Enfoque
   let focusLongPressTimer;
   $('focusBtn').addEventListener('mousedown', () => {
     focusLongPressTimer = setTimeout(() => {
@@ -1189,9 +1288,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }, 2000);
   });
-  $('focusBtn').addEventListener('mouseup', () => {
-    clearTimeout(focusLongPressTimer);
-  });
+  $('focusBtn').addEventListener('mouseup', () => clearTimeout(focusLongPressTimer));
   $('focusBtn').addEventListener('touchstart', () => {
     focusLongPressTimer = setTimeout(() => {
       if (confirm('¿Resetear datos de enfoque de hoy?\n\nEsto NO afecta a los tiempos de clientes, solo a las estadísticas de enfoque diario.')) {
@@ -1199,49 +1296,36 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }, 2000);
   });
-  $('focusBtn').addEventListener('touchend', () => {
-    clearTimeout(focusLongPressTimer);
-  });
+  $('focusBtn').addEventListener('touchend', () => clearTimeout(focusLongPressTimer));
 
-  // BOTONES DE ACTIVIDAD
   document.querySelectorAll('.activity').forEach(btn => {
     btn.onclick = () => setActivity(btn.dataset.activity);
   });
 
-  // CERRAR MODALES AL CLIC FUERA
   document.querySelectorAll('.modal-overlay').forEach(overlay => {
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) closeModal(overlay.id);
     });
   });
 
-  // ENTER EN INPUTS
-  if ($('inputNewClient')) {
-    $('inputNewClient').addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') confirmNewClient();
-    });
-  }
+  if ($('inputNewClient')) $('inputNewClient').addEventListener('keypress', e => {
+    if (e.key === 'Enter') confirmNewClient();
+  });
 
-  if ($('inputDeleteConfirm')) {
-    $('inputDeleteConfirm').addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') confirmDeleteClient();
-    });
-  }
+  if ($('inputDeleteConfirm')) $('inputDeleteConfirm').addEventListener('keypress', e => {
+    if (e.key === 'Enter') confirmDeleteClient();
+  });
 
-  // BUSCADOR DE HISTÓRICO
-  if ($('searchHistory')) {
-    $('searchHistory').addEventListener('input', (e) => {
-      const query = e.target.value.toLowerCase();
-      const closed = Object.values(state.clients).filter(c => !c.active);
-      const filtered = closed.filter(c =>
-        c.name.toLowerCase().includes(query) ||
-        (c.notes || '').toLowerCase().includes(query)
-      );
-      renderHistoryList(filtered);
-    });
-  }
+  if ($('searchHistory')) $('searchHistory').addEventListener('input', e => {
+    const query = e.target.value.toLowerCase();
+    const closed = Object.values(state.clients).filter(c => !c.active);
+    const filtered = closed.filter(c =>
+      c.name.toLowerCase().includes(query) ||
+      (c.notes || '').toLowerCase().includes(query)
+    );
+    renderHistoryList(filtered);
+  });
 
-  // VERIFICAR LICENCIA AL INICIO
   if (state.license && state.license.expiryDate) {
     const expiry = new Date(state.license.expiryDate);
     if (expiry < new Date()) {
@@ -1252,6 +1336,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // INICIO
+  scheduleFullAutoBackup();
   updateUI();
 });
