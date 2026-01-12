@@ -1,5 +1,5 @@
 /* ===============================
-   RESET BÁSICO
+   RESET BÃSICO
    =============================== */
 
 * {
@@ -210,7 +210,7 @@ button:hover,
 }
 
 /* ===============================
-   BOTÓN ANCHO COMPLETO
+   BOTÃ"N ANCHO COMPLETO
    =============================== */
 
 .full-width {
@@ -218,7 +218,7 @@ button:hover,
 }
 
 /* ===============================
-   BOTÓN PRIMARY (Cámara, etc)
+   BOTÃ"N PRIMARY (CÃ¡mara, etc)
    =============================== */
 
 #cameraBtn,
@@ -247,7 +247,7 @@ button:hover,
 }
 
 /* ===============================
-   BOTÓN DANGER (Cerrar)
+   BOTÃ"N DANGER (Cerrar)
    =============================== */
 
 .danger,
@@ -403,7 +403,7 @@ button:hover,
 }
 
 /* ===============================
-   FEINES PER URGÈNCIA (TAREAS)
+   FEINES PER URGÃˆNCIA (TAREAS)
    =============================== */
 
 /* Textarea Urgent (Rojo) */
@@ -467,7 +467,7 @@ button:hover,
 }
 
 /* ===============================
-   GALERÍA DE FOTOS
+   GALERÃA DE FOTOS
    =============================== */
 
 .photo-gallery {
@@ -516,7 +516,7 @@ button:hover,
 }
 
 /* ===============================
-   BLOQUE VERSIÓN / ACTIVACIÓN
+   BLOQUE VERSIÃ"N / ACTIVACIÃ"N
    =============================== */
 
 .version-box {
@@ -907,4 +907,166 @@ button:hover,
   border: 2px solid rgba(16, 185, 129, 0.3);
 }
 
-.focus-state.
+.focus-state.no-enfocado {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border: 2px solid rgba(239, 68, 68, 0.3);
+}
+
+/* ===============================
+   TIEMPO FACTURABLE BOX
+   =============================== */
+
+.billable-time-box {
+  margin-top: 12px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: center;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+  letter-spacing: 0.3px;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+/* ===============================
+   BOTONES SECONDARY
+   =============================== */
+
+button.secondary,
+.secondary {
+  background: rgba(51, 65, 85, 0.6) !important;
+  backdrop-filter: blur(10px);
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+button.secondary:hover,
+.secondary:hover {
+  background: rgba(51, 65, 85, 0.8) !important;
+}
+
+/* ===============================
+   EXTRA HOURS LIST
+   =============================== */
+
+.extra-hours-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.extra-hour-item {
+  padding: 14px;
+  background: rgba(51, 65, 85, 0.4);
+  border-radius: 12px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  transition: all 0.3s ease;
+}
+
+.extra-hour-item:hover {
+  background: rgba(51, 65, 85, 0.6);
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+.extra-hour-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.extra-hour-amount {
+  font-size: 16px;
+  font-weight: 700;
+  color: #60a5fa;
+}
+
+.extra-hour-date {
+  font-size: 13px;
+  opacity: 0.7;
+}
+
+.extra-hour-description {
+  font-size: 14px;
+  margin-bottom: 10px;
+  opacity: 0.9;
+  line-height: 1.4;
+}
+
+.btn-danger-small {
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: white;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  width: 100%;
+}
+
+.btn-danger-small:hover {
+  background: linear-gradient(135deg, #dc2626, #b91c1c);
+  transform: translateY(-1px);
+}
+
+/* ===============================
+   REPORT CONTENT
+   =============================== */
+
+.report-content {
+  background: rgba(15, 23, 42, 0.6);
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #e2e8f0;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.report-content::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.report-content::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.4);
+  border-radius: 4px;
+}
+
+.report-content::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 4px;
+}
+
+.report-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.5);
+}
+
+/* ===============================
+   RESPONSIVE ADJUSTMENTS
+   =============================== */
+
+@media (max-width: 480px) {
+  .report-content {
+    font-size: 11px;
+    padding: 14px;
+  }
+  
+  .extra-hour-item {
+    padding: 12px;
+  }
+  
+  .extra-hour-amount {
+    font-size: 14px;
+  }
+}
