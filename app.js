@@ -880,7 +880,16 @@ function updateUI() {
 
 function updateDeliveryDateDisplay(client) {
   const deliveryBox = $("deliveryDateBox");
-  if (!deliveryBox) return;
+  if (!deliveryBox) {
+    console.warn('deliveryDateBox no encontrado');
+    return;
+  }
+
+  if (!client || !client.deliveryDate) {
+    deliveryBox.style.display = "none";
+    deliveryBox.classList.add("hidden");
+    return;
+  }
 
   const deliveryDate = new Date(client.deliveryDate);
   const today = new Date();
@@ -913,6 +922,7 @@ function updateDeliveryDateDisplay(client) {
 
   deliveryBox.textContent = message;
   deliveryBox.className = className;
+  deliveryBox.classList.remove("hidden");
   deliveryBox.style.display = "block";
 }
 
