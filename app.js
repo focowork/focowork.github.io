@@ -632,11 +632,14 @@ function tick() {
 
   client.activities[state.currentActivity] = (client.activities[state.currentActivity] || 0) + elapsed;
 
+  // Contabilizar tiempo facturable
   if (state.focusSchedule.enabled) {
     if (isWithinFocusSchedule()) {
+      client.billableTime = (client.billableTime || 0) + elapsed;
       state.focus[state.currentActivity] = (state.focus[state.currentActivity] || 0) + elapsed;
     }
   } else {
+    client.billableTime = (client.billableTime || 0) + elapsed;
     state.focus[state.currentActivity] = (state.focus[state.currentActivity] || 0) + elapsed;
   }
 
@@ -837,6 +840,18 @@ function updateUI() {
     $("clientTotal").textContent = client ? `Total cliente: ${formatTime(client.total)}` : "";
   }
 
+  // Mostrar tiempo facturable si hay horario configurado
+  if (client && state.focusSchedule.enabled) {
+    const billableBox = $("billableTimeBox");
+    if (billableBox) {
+      const billableTime = client.billableTime || 0;
+      billableBox.textContent = `💰 Facturable: ${formatTime(billableTime)}`;
+      billableBox.style.display = "block";
+    }
+  } else if ($("billableTimeBox")) {
+    $("billableTimeBox").style.display = "none";
+  }
+
   // Mostrar fecha de entrega si existe
   if (client && client.deliveryDate) {
     updateDeliveryDateDisplay(client);
@@ -949,10 +964,12 @@ function confirmNewClient() {
     name,
     active: true,
     total: 0,
+    billableTime: 0,
     activities: {},
     photos: [],
     notes: "",
     deliveryDate: null,
+    extraHours: [],
     tasks: {
       urgent: "",
       important: "",
@@ -1323,6 +1340,246 @@ function exportTodayCSV() {
   showAlert('CSV exportado', 'El archivo se ha descargado correctamente', '📄');
 }
 
+/* ================= HORAS EXTRAS ================= */
+function addExtraHours() {
+  const client = state.clients[state.currentClientId];
+  if (!client) {
+    showAlert('Sin cliente', 'Selecciona un cliente primero', '⚠️');
+    return;
+  }
+
+  $('inputExtraHours').value = '';
+  $('inputExtraDescription').value = '';
+  openModal('modalExtraHours');
+
+  setTimeout(() => $('inputExtraHours').focus(), 300);
+}
+
+function saveExtraHours() {
+  const client = state.clients[state.currentClientId];
+  if (!client) return;
+
+  const hours = parseFloat($('inputExtraHours').value);
+  const description = $('inputExtraDescription').value.trim();
+
+  if (!hours || hours <= 0) {
+    showAlert('Error', 'Introduce un número de horas válido', '⚠️');
+    return;
+  }
+
+  if (!client.extraHours) client.extraHours = [];
+
+  const extraEntry = {
+    id: uid(),
+    date: new Date().toISOString(),
+    hours: hours,
+    seconds: Math.round(hours * 3600),
+    description: description || 'Horas extra',
+    billable: true
+  };
+
+  client.extraHours.push(extraEntry);
+  client.billableTime = (client.billableTime || 0) + extraEntry.seconds;
+
+  save();
+  closeModal('modalExtraHours');
+  showAlert('Horas añadidas', `${hours}h añadidas correctamente\n\n"${extraEntry.description}"`, '✅');
+}
+
+function showExtraHours() {
+  const client = state.clients[state.currentClientId];
+  if (!client) {
+    showAlert('Sin cliente', 'Selecciona un cliente primero', '⚠️');
+    return;
+  }
+
+  if (!client.extraHours || !client.extraHours.length) {
+    showAlert('Sin horas extra', 'Este cliente no tiene horas extra registradas', 'ℹ️');
+    return;
+  }
+
+  const list = $('extraHoursList');
+  list.innerHTML = '';
+
+  let totalExtra = 0;
+  client.extraHours.forEach(entry => {
+    totalExtra += entry.seconds;
+    
+    const item = document.createElement('div');
+    item.className = 'extra-hour-item';
+    item.innerHTML = `
+      <div class="extra-hour-header">
+        <span class="extra-hour-amount">⏱️ ${entry.hours}h</span>
+        <span class="extra-hour-date">${new Date(entry.date).toLocaleDateString('es-ES')}</span>
+      </div>
+      <div class="extra-hour-description">${entry.description}</div>
+      <button class="btn-danger-small" onclick="deleteExtraHour('${entry.id}')">🗑️ Eliminar</button>
+    `;
+    list.appendChild(item);
+  });
+
+  $('extraHoursTotal').textContent = formatTime(totalExtra);
+
+  openModal('modalViewExtraHours');
+}
+
+function deleteExtraHour(entryId) {
+  const client = state.clients[state.currentClientId];
+  if (!client || !client.extraHours) return;
+
+  const entry = client.extraHours.find(e => e.id === entryId);
+  if (!entry) return;
+
+  if (!confirm(`¿Eliminar ${entry.hours}h de horas extra?\n\n"${entry.description}"`)) return;
+
+  client.extraHours = client.extraHours.filter(e => e.id !== entryId);
+  client.billableTime = (client.billableTime || 0) - entry.seconds;
+
+  save();
+  closeModal('modalViewExtraHours');
+  showAlert('Hora eliminada', 'La entrada de horas extra ha sido eliminada', '🗑️');
+}
+
+/* ================= REPORT MEJORADO ================= */
+function generateReport() {
+  const client = state.clients[state.currentClientId];
+  if (!client) {
+    showAlert('Sin cliente', 'Selecciona un cliente primero', '⚠️');
+    return;
+  }
+
+  // Calcular tiempo facturable
+  const billableTime = client.billableTime || 0;
+  const extraHoursTotal = (client.extraHours || []).reduce((sum, e) => sum + e.seconds, 0);
+  const totalBillable = billableTime;
+
+  // Desglose de actividades facturables
+  let activitiesBreakdown = '';
+  const billableActivities = {};
+  
+  // Solo mostrar actividades si hay horario configurado
+  if (state.focusSchedule.enabled) {
+    activitiesBreakdown = '\n📊 DESGLOSE DE ACTIVIDADES FACTURABLES:\n';
+    for (const act in client.activities) {
+      const time = client.activities[act];
+      activitiesBreakdown += `   • ${activityLabel(act)}: ${formatTime(time)}\n`;
+    }
+  }
+
+  // Horas extra
+  let extraHoursSection = '';
+  if (client.extraHours && client.extraHours.length > 0) {
+    extraHoursSection = '\n⏱️ HORAS EXTRA:\n';
+    client.extraHours.forEach(entry => {
+      const date = new Date(entry.date).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
+      extraHoursSection += `   • ${date}: ${entry.hours}h - ${entry.description}\n`;
+    });
+    extraHoursSection += `   TOTAL EXTRA: ${formatTime(extraHoursTotal)}\n`;
+  }
+
+  // Notas
+  const notesSection = client.notes && client.notes.trim() 
+    ? `\n📝 NOTAS:\n${client.notes}\n` 
+    : '';
+
+  // Fecha de entrega
+  let deliverySection = '';
+  if (client.deliveryDate) {
+    const deliveryDate = new Date(client.deliveryDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const delivery = new Date(deliveryDate);
+    delivery.setHours(0, 0, 0, 0);
+    const diffDays = Math.ceil((delivery - today) / (1000 * 60 * 60 * 24));
+    
+    let status = '';
+    if (diffDays < 0) status = '⚠️ VENCIDA';
+    else if (diffDays === 0) status = '🔴 HOY';
+    else if (diffDays <= 3) status = `🟡 ${diffDays} días`;
+    else status = '📅';
+    
+    deliverySection = `\n📅 FECHA DE ENTREGA: ${deliveryDate.toLocaleDateString('es-ES')} ${status}\n`;
+  }
+
+  // Configuración horaria
+  const scheduleInfo = state.focusSchedule.enabled 
+    ? `\n⏰ HORARIO FACTURABLE: ${state.focusSchedule.start} - ${state.focusSchedule.end}\n` 
+    : '\n⏰ Sin horario facturable configurado (todo el tiempo cuenta)\n';
+
+  const reportText = 
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `       📋 INFORME DE PROYECTO\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+    `👤 CLIENTE: ${client.name}\n` +
+    `📅 Fecha: ${new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })}\n` +
+    `👨‍💼 Responsable: ${userName}\n` +
+    deliverySection +
+    scheduleInfo +
+    `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `⏱️ TIEMPO TOTAL TRABAJADO: ${formatTime(client.total)}\n` +
+    `💰 TIEMPO FACTURABLE: ${formatTime(totalBillable)}\n` +
+    `${extraHoursSection}` +
+    activitiesBreakdown +
+    `\n📷 FOTOGRAFÍAS: ${client.photos.length}\n` +
+    notesSection +
+    `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `Generado con FocoWork v${APP_VERSION}\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+  $('reportContent').textContent = reportText;
+  openModal('modalReport');
+}
+
+function copyReport() {
+  const reportText = $('reportContent').textContent;
+  
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(reportText)
+      .then(() => {
+        showAlert('Copiado', 'Informe copiado al portapapeles', '✅');
+      })
+      .catch(() => {
+        fallbackCopy(reportText);
+      });
+  } else {
+    fallbackCopy(reportText);
+  }
+}
+
+function fallbackCopy(text) {
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+  
+  try {
+    document.execCommand('copy');
+    showAlert('Copiado', 'Informe copiado al portapapeles', '✅');
+  } catch (err) {
+    showAlert('Error', 'No se pudo copiar. Copia manualmente desde el modal.', '⚠️');
+  }
+  
+  document.body.removeChild(textarea);
+}
+
+function shareReport() {
+  const reportText = $('reportContent').textContent;
+  const client = state.clients[state.currentClientId];
+  
+  if (navigator.share) {
+    navigator.share({
+      title: `Informe - ${client.name}`,
+      text: reportText
+    }).catch(() => {
+      copyReport();
+    });
+  } else {
+    copyReport();
+  }
+}
+
 /* ================= CONFIGURACIÓN DE HORARIO ================= */
 function openScheduleModal() {
   const checkbox = $('scheduleEnabled');
@@ -1420,6 +1677,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   $('deleteClientBtn').onclick = deleteCurrentClient;
 
   if ($('setDeliveryDateBtn')) $('setDeliveryDateBtn').onclick = setDeliveryDate;
+  if ($('addExtraHoursBtn')) $('addExtraHoursBtn').onclick = addExtraHours;
+  if ($('viewExtraHoursBtn')) $('viewExtraHoursBtn').onclick = showExtraHours;
+  if ($('generateReportBtn')) $('generateReportBtn').onclick = generateReport;
   if ($('exportWorkBtn')) $('exportWorkBtn').onclick = exportCurrentWork;
   if ($('importWorkBtn')) $('importWorkBtn').onclick = importWork;
   if ($('exportAllBtn')) $('exportAllBtn').onclick = exportAllData;
