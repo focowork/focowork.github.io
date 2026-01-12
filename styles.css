@@ -1069,8 +1069,12 @@ button.secondary:hover,
   .extra-hour-amount {
     font-size: 14px;
   }
-  @media (display-mode: standalone) {
+@media (display-mode: standalone) {
   .version-box {
     position: static;
   }
-} 
+
+  .app {
+    padding-bottom: calc(180px + env(safe-area-inset-bottom));
+  }
+}
