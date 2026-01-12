@@ -29,6 +29,9 @@
       <div id="timer" class="timer">00:00:00</div>
       <div id="clientTotal" class="client-total"></div>
       
+      <!-- TIEMPO FACTURABLE -->
+      <div id="billableTimeBox" class="billable-time-box" style="display: none;"></div>
+      
       <!-- AVISO FUERA DE HORARIO DE ENFOQUE -->
       <div id="focusScheduleStatus" style="display: none; margin-top: 8px; padding: 6px 12px; background: rgba(251, 191, 36, 0.2); border-radius: 6px; font-size: 0.85rem; color: #fbbf24; text-align: center;"></div>
     </header>
@@ -39,7 +42,7 @@
         <button class="activity" data-activity="work">🟦 Trabajo</button>
         <button class="activity" data-activity="phone">📞 Teléfono</button>
         <button class="activity" data-activity="client">👥 Cliente</button>
-        <button class="activity" data-activity="visit">🔘 Visitando</button>
+        <button class="activity" data-activity="visit">📘 Visitando</button>
         <button class="activity full-width" data-activity="other">⚙️ Otros</button>
       </div>
     </section>
@@ -90,9 +93,23 @@
         ></textarea>
       </div>
 
-      <button id="setDeliveryDateBtn" class="primary">
-        📅 Fecha Entrega
-      </button>
+      <div class="grid" style="margin-top: 12px;">
+        <button id="setDeliveryDateBtn" class="primary">
+          📅 Fecha
+        </button>
+        <button id="generateReportBtn" class="primary">
+          📋 Informe
+        </button>
+      </div>
+
+      <div class="grid" style="margin-top: 12px;">
+        <button id="addExtraHoursBtn" class="secondary">
+          ⏱️ Añadir horas
+        </button>
+        <button id="viewExtraHoursBtn" class="secondary">
+          📊 Ver horas
+        </button>
+      </div>
 
       <button id="cameraBtn" class="primary">
         📷 Añadir foto al cliente
@@ -204,6 +221,74 @@
       <div class="modal-footer">
         <button class="btn-secondary" onclick="closeModal('modalDeliveryDate')">Cancelar</button>
         <button class="btn-primary" onclick="saveDeliveryDate()">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Añadir Horas Extra -->
+  <div id="modalExtraHours" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-icon">⏱️</span>
+        <h2 class="modal-title">Añadir Horas Extra</h2>
+      </div>
+      <div class="modal-body">
+        <p class="modal-text">Registra horas trabajadas fuera del proyecto principal:</p>
+        
+        <label class="modal-label">Horas</label>
+        <input type="number" id="inputExtraHours" class="modal-input" placeholder="Ej: 2.5" step="0.25" min="0.25">
+        
+        <label class="modal-label">Descripción</label>
+        <input type="text" id="inputExtraDescription" class="modal-input" placeholder="Ej: Reunión cliente, Diseño adicional, etc.">
+        
+        <div style="margin-top: 16px; padding: 12px; background: rgba(59, 130, 246, 0.1); border-radius: 8px; border-left: 3px solid #3b82f6;">
+          <p style="margin: 0; font-size: 0.9rem; color: #93c5fd;">
+            ℹ️ Estas horas se sumarán al tiempo facturable del cliente
+          </p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeModal('modalExtraHours')">Cancelar</button>
+        <button class="btn-primary" onclick="saveExtraHours()">Añadir</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Ver Horas Extra -->
+  <div id="modalViewExtraHours" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-icon">📊</span>
+        <h2 class="modal-title">Horas Extra Registradas</h2>
+      </div>
+      <div class="modal-body">
+        <div id="extraHoursList" class="extra-hours-list"></div>
+        <div class="total-stats" style="margin-top: 16px;">
+          <div class="total-time">
+            Total horas extra: <strong id="extraHoursTotal">00:00:00</strong>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-primary" onclick="closeModal('modalViewExtraHours')">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Informe/Report -->
+  <div id="modalReport" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-icon">📋</span>
+        <h2 class="modal-title">Informe de Proyecto</h2>
+      </div>
+      <div class="modal-body">
+        <pre id="reportContent" class="report-content"></pre>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeModal('modalReport')">Cerrar</button>
+        <button class="btn-primary" onclick="copyReport()">📋 Copiar</button>
+        <button class="btn-success" onclick="shareReport()">📤 Compartir</button>
       </div>
     </div>
   </div>
