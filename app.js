@@ -1574,21 +1574,44 @@ function fallbackCopy(text) {
   document.body.removeChild(textarea);
 }
 
-function shareReport() {
+async function shareReport() {
   const reportText = $('reportContent').textContent;
   const client = state.clients[state.currentClientId];
-  
-  if (navigator.share) {
-    navigator.share({
-      title: `Informe - ${client.name}`,
-      text: reportText
-    }).catch(() => {
+  if (!client) return;
+
+  // Convertir fotos base64 a File
+  const files = [];
+  for (let i = 0; i < client.photos.length; i++) {
+    const p = client.photos[i];
+    const res = await fetch(p.data);
+    const blob = await res.blob();
+    const file = new File(
+      [blob],
+      `foto_${i + 1}.jpg`,
+      { type: blob.type }
+    );
+    files.push(file);
+  }
+
+  // Comprovar si el navegador pot compartir fitxers
+  if (
+    navigator.share &&
+    (!files.length || navigator.canShare({ files }))
+  ) {
+    try {
+      await navigator.share({
+        title: `Informe - ${client.name}`,
+        text: reportText,
+        files: files
+      });
+    } catch (err) {
       copyReport();
-    });
+    }
   } else {
     copyReport();
   }
 }
+
 
 /* ================= CONFIGURACIÓN DE HORARIO ================= */
 function openScheduleModal() {
